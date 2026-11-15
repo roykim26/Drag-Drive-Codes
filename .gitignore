@@ -14,6 +14,9 @@ gsc-oauth-token*.json
 preview/*.png
 *.local
 
+# wrangler local cache (created by `wrangler pages deploy`)
+.wrangler/
+
 # OS / editor noise
 .DS_Store
 Thumbs.db

@@ -331,6 +331,21 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
 .pill{display:inline-flex;align-items:center;gap:7px;background:var(--bg-elev-2);border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12px;color:var(--text-dim);white-space:nowrap;flex:0 0 auto}
 .pill__word{display:none}
 @media(min-width:420px){.pill__word{display:inline}}
+.hdr__end{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+/* Mobile menu: <details> so it works with no JS. Hidden from 900px up, where .nav takes over. */
+.mnav{flex:0 0 auto}
+.mnav__btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:44px;padding:0 14px;font-size:14px;font-weight:600;color:var(--text-dim);background:var(--bg-elev-2);border:1px solid var(--line);border-radius:999px;cursor:pointer;list-style:none;user-select:none}
+.mnav__btn::-webkit-details-marker{display:none}
+.mnav__btn::after{content:"";width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translateY(-1px);transition:transform .15s}
+.mnav[open] .mnav__btn{color:var(--text);border-color:var(--line-strong)}
+.mnav[open] .mnav__btn::after{transform:rotate(-135deg) translateY(-2px)}
+.mnav__panel{position:absolute;left:0;right:0;top:100%;background:var(--bg);border-bottom:1px solid var(--line);box-shadow:0 20px 32px rgba(0,0,0,.5);padding:10px 16px 14px;display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.mnav:not([open]) .mnav__panel{display:none}
+.mnav__panel a{display:flex;align-items:center;min-height:44px;padding:0 12px;font-size:15px;color:var(--text-dim);background:var(--bg-elev);border:1px solid var(--line);border-radius:var(--radius-sm)}
+.mnav__panel a:hover{color:var(--text);text-decoration:none;border-color:var(--line-strong)}
+.mnav__panel a[aria-current=page]{color:var(--accent)}
+@media(min-width:900px){.mnav{display:none}}
+@media(max-width:419px){.pill{display:none}}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(53,208,127,.16);flex:0 0 auto}
 main{padding-bottom:16px}
 .hero{padding:30px 0 0}
@@ -542,7 +557,15 @@ def head(title: str, desc: str, slug: str, jsonld: list[dict], noindex: bool = F
     <nav class="nav" aria-label="Primary">
       {''.join(f'<a href="{u}"{" aria-current=page" if u == slug else ""}>{esc(t)}</a>' for u, t in NAV)}
     </nav>
-    <span class="pill"><span class="dot" aria-hidden="true"></span><span class="pill__word">Checked&nbsp;</span>{CHECKED_HUMAN}</span>
+    <div class="hdr__end">
+      <span class="pill"><span class="dot" aria-hidden="true"></span><span class="pill__word">Checked&nbsp;</span>{CHECKED_HUMAN}</span>
+      <details class="mnav">
+        <summary class="mnav__btn">Menu</summary>
+        <nav class="mnav__panel" aria-label="Mobile">
+          {''.join(f'<a href="{u}"{" aria-current=page" if u == slug else ""}>{esc(t)}</a>' for u, t in FOOTER_LINKS)}
+        </nav>
+      </details>
+    </div>
   </div>
 </header>
 <main id="main" class="wrap">

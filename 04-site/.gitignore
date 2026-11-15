@@ -1,0 +1,14 @@
+# Build output — regenerate with `python build.py`
+dist/
+dist-local/
+__pycache__/
+*.pyc
+
+# Local-only credentials. Never commit these, and never copy them into dist/.
+gsc-service-account.json
+gsc-oauth-token.json
+.env
+.env.*
+
+# Local preview artefacts
+preview/*.png

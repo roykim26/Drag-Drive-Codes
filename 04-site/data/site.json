@@ -1,0 +1,29 @@
+{
+  "brand": "DragDriveCodes",
+  "base_url": "https://dragdrivecodes.space",
+  "last_checked": "2026-11-15",
+  "contact_email": "hello@dragdrivecodes.space",
+  "ads": {
+    "enabled": false,
+    "client": "",
+    "slots": {
+      "home-after-codes": "",
+      "home-end": "",
+      "redeem-mid": "",
+      "expired-after-tables": "",
+      "rp-mid": "",
+      "updates-mid": ""
+    }
+  },
+  "game": {
+    "name": "Drag Drive Simulator",
+    "aliases": "DDS / RDID Revamp",
+    "developer": "ADV Gamers Team",
+    "roblox_url": "https://www.roblox.com/games/131378148336503/Drag-Drive-Simulator",
+    "discord_url": "https://discord.gg/tdZmyXQmMR",
+    "group_url": "https://www.roblox.com/communities/11378976",
+    "youtube_url": "https://youtube.com/channel/UC3ArC6cChepxHadMnftpW0A",
+    "version": "BETA V1.1.9 (Wheelie Style x Big Update)",
+    "created": "2025-01-15"
+  }
+}

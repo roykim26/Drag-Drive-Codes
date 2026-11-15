@@ -1,0 +1,149 @@
+{
+  "verified_on": "2026-11-15",
+  "active": [
+    {
+      "code": "DRAGDRIVESIMULATORSEPTEMBER26",
+      "reward_min": 35000000,
+      "reward_max": 35000000,
+      "status": "confirmed",
+      "added": "2026-09-27",
+      "last_verified": "2026-11-15",
+      "in_game_verified": null,
+      "sources": [
+        "Official Roblox game page",
+        "timesaver.gg",
+        "rocodes.gg"
+      ],
+      "note": "Named on the official Roblox page as the newest code, alongside four more from the V1.1.9 update."
+    },
+    {
+      "code": "HBDADVGAMERSTEAM26",
+      "reward_min": 30000000,
+      "reward_max": 60000000,
+      "status": "confirmed",
+      "added": "2026-09-27",
+      "last_verified": "2026-11-15",
+      "in_game_verified": null,
+      "sources": [
+        "Official Roblox game page",
+        "timesaver.gg",
+        "rocodes.gg"
+      ],
+      "note": "Birthday code for the studio, ADV Gamers Team. Trackers disagree on the exact amount (30M vs 60M RP)."
+    },
+    {
+      "code": "DDSWHEELIESTYLEUPDATE",
+      "reward_min": 30000000,
+      "reward_max": 30000000,
+      "status": "confirmed",
+      "added": "2026-09-27",
+      "last_verified": "2026-11-15",
+      "in_game_verified": null,
+      "sources": [
+        "Official Roblox game page",
+        "timesaver.gg",
+        "rocodes.gg"
+      ],
+      "note": "Released with BETA V1.1.9, the Wheelie Style update."
+    },
+    {
+      "code": "NEWGATSUMAPNEWMODIFICATION",
+      "reward_min": 25000000,
+      "reward_max": 35000000,
+      "status": "confirmed",
+      "added": "2026-09-27",
+      "last_verified": "2026-11-15",
+      "in_game_verified": null,
+      "sources": [
+        "Official Roblox game page",
+        "timesaver.gg",
+        "rocodes.gg"
+      ],
+      "note": "Tied to the Gatsu Street map expansion in Surakarta that shipped with V1.1.9."
+    },
+    {
+      "code": "DELAYDIKITLAGIFREESTYLE",
+      "reward_min": 20000000,
+      "reward_max": 25000000,
+      "status": "confirmed",
+      "added": "2026-09-27",
+      "last_verified": "2026-11-15",
+      "in_game_verified": null,
+      "sources": [
+        "Official Roblox game page",
+        "timesaver.gg",
+        "rocodes.gg"
+      ],
+      "note": "One of the studio's \"delay\" apology codes (delay dikit is Indonesian slang for a short delay)."
+    }
+  ],
+  "unconfirmed": [
+    {
+      "code": "DDSSLAMETRIYADIUPDATE",
+      "reward_min": 25000000,
+      "reward_max": 30000000,
+      "status": "reported",
+      "added": "2026-09-27",
+      "last_verified": "2026-11-15",
+      "in_game_verified": null,
+      "sources": [
+        "urgametips.com"
+      ],
+      "note": "Listed as active by one tracker, marked expired by another and left out by the rest. Worth one attempt."
+    }
+  ],
+  "expired": {
+    "2026": [
+      { "code": "DRAGDRIVESIMULATORAUGUST26", "reward": 35000000 },
+      { "code": "DDSSPECIALMERDEKA2026", "reward": 30000000 },
+      { "code": "NEWLIGHTSMODIFICATION", "reward": 20000000 },
+      { "code": "DELAYDIKITBARULOMBA", "reward": 25000000 },
+      { "code": "DDSTHX175KROADTO200KLIKES", "reward": 75000000 },
+      { "code": "DRAGDRIVESIMULATORJULY26", "reward": 35000000 },
+      { "code": "DDSTHX150KROADTO175KLIKES", "reward": 75000000 },
+      { "code": "DELAYXIXIORDERANDOUBLE", "reward": 25000000 },
+      { "code": "DDSDRIVERTAXIONLINEUPDATE", "reward": 30000000 },
+      { "code": "DRAGDRIVESIMULATORJUNE26", "reward": 35000000 },
+      { "code": "DDSSUPERMANSTYLE", "reward": 30000000 },
+      { "code": "MOREPROPSPAWNERUPDATE", "reward": 30000000 },
+      { "code": "HAPPYSCHOOLHOLIDAYS26", "reward": 35000000 },
+      { "code": "DELAYDIKITADASAPINGAMUK", "reward": 25000000 },
+      { "code": "DDSEIDADHAMUBARAK26", "reward": 30000000 },
+      { "code": "NEWMAPNEWCREWFEATURES", "reward": 30000000 },
+      { "code": "DDSTHX125KROADTO150KLIKES", "reward": 75000000 },
+      { "code": "DRAGDRIVESIMULATORAPRIL26", "reward": 35000000 },
+      { "code": "DDSMOUNTINGUPDATE", "reward": 35000000 },
+      { "code": "THX4MILLIONADVCOMMUNITY", "reward": 40000000 },
+      { "code": "LUNARNEWYEAR2026", "reward": 35000000 },
+      { "code": "WELCOMERAMADAN2026", "reward": 30000000 },
+      { "code": "HAPPY1STANNIVERSARYDDS", "reward": 50000000 }
+    ],
+    "2025": [
+      { "code": "DDSDRAGRACETOURNAMENTREADY", "reward": 25000000, "expired_on": "2025-12-05" },
+      { "code": "HAPPY80THINDEPENDENCEDAYRI", "reward": 30000000, "expired_on": "2025-12-05" },
+      { "code": "SORRYFORDELAYMERDEKA", "reward": 20000000, "expired_on": "2025-12-05" },
+      { "code": "NEWCODEON10KLIKES", "reward": 30000000, "expired_on": "2025-08-07" },
+      { "code": "DRAGDRIVESIMULATORV102", "reward": 45000000, "expired_on": "2025-08-07" },
+      { "code": "NEWSENTULTRACK", "reward": 25000000, "expired_on": "2025-08-07" },
+      { "code": "APRILMOPLIMITEDUPDATE", "reward": 30000000, "expired_on": "2025-08-07" },
+      { "code": "RAMADAN2025", "reward": 20000000, "expired_on": "2025-08-07" },
+      { "code": "OTW5KLIKESFORNEWCODE", "reward": 30000000, "expired_on": "2025-08-07" },
+      { "code": "DRAGDRIVESIMULATORUPDATE", "reward": 30000000, "expired_on": "2025-08-07" },
+      { "code": "DRAGDRIVESIMULATORJULY", "reward": null, "expired_on": "2025-08-07" },
+      { "code": "RDIDMODIFICATIONCUSTOMPLATE", "reward": null, "expired_on": "2025-08-07" },
+      { "code": "SORRYFORDELAYUPDATE", "reward": null, "expired_on": "2025-08-07" },
+      { "code": "RDIDMAPREVAMPPHASE1", "reward": null, "expired_on": "2025-08-07" },
+      { "code": "RDIDMODIFICATIONUPDATE", "reward": null, "expired_on": "2025-08-07" },
+      { "code": "EIDALADHA2025", "reward": null, "expired_on": "2025-08-07" },
+      { "code": "DRAGDRIVESIMULATORJUNE", "reward": null, "expired_on": "2025-08-07" },
+      { "code": "NEWDRAGDRIVESIMULATOR", "reward": null, "expired_on": "2025-08-07" },
+      { "code": "LETSCOMPLETEDAILYQUEST", "reward": null, "expired_on": "2025-08-07" },
+      { "code": "RDIDNEWMODIFICATION", "reward": null, "expired_on": "2025-08-07" }
+    ]
+  },
+  "milestones": {
+    "likes": 209410,
+    "next_code_likes": 200000,
+    "discord_members": 309894
+  }
+}

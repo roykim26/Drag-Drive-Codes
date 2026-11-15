@@ -1,0 +1,22 @@
+# Build output — regenerate with `python build.py` (Cloudflare Pages runs it too)
+dist/
+dist-local/
+__pycache__/
+*.pyc
+
+# Credentials. Never commit these, and never copy them into dist/.
+gsc-service-account*.json
+gsc-oauth-token*.json
+.env
+.env.*
+
+# Local preview artefacts / screenshots (reproducible, not source)
+preview/*.png
+*.local
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/

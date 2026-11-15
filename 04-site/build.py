@@ -56,6 +56,7 @@ CODES = json.loads((DATA / "codes.json").read_text(encoding="utf-8"))
 BRAND = SITE["brand"]
 BASE = SITE["base_url"].rstrip("/")
 EMAIL = SITE["contact_email"]
+ABUSE = SITE.get("abuse_email") or EMAIL
 CHECKED = SITE["last_checked"]
 GAME = SITE["game"]
 
@@ -165,6 +166,21 @@ def report_href(code: str) -> str:
         f"Anything else that helps:\n",
         safe="")
     return f"mailto:{EMAIL}?subject={subject}&body={body}"
+
+
+def validate_contacts() -> None:
+    """Both addresses must be real mailboxes on the site's own domain."""
+    host = BASE.split("//", 1)[-1]
+    errors: list[str] = []
+    for field, addr in (("contact_email", EMAIL), ("abuse_email", ABUSE)):
+        if not re.fullmatch(r"[a-z0-9._%+-]+@" + re.escape(host), addr or ""):
+            errors.append(f"{field}={addr!r} 不是 {host} 上的有效邮箱地址")
+    if errors:
+        print("\nBUILD FAILED — contact config is not publishable:")
+        for e in errors:
+            print(f"  - {e}")
+        raise SystemExit(1)
+    print(f"  contacts validation OK ({EMAIL}, {ABUSE})")
 
 
 def validate_data() -> None:
@@ -550,6 +566,7 @@ def head(title: str, desc: str, slug: str, jsonld: list[dict], noindex: bool = F
 {ADS_HEAD}
 </head>
 <body>
+<!--email_off-->
 <a class="skip" href="#main">Skip to content</a>
 <header class="hdr">
   <div class="wrap hdr__in">
@@ -593,6 +610,7 @@ def footer() -> str:
 </footer>
 <div class="sr-only" id="copy-status" role="status" aria-live="polite"></div>
 <script>{JS}</script>
+<!--/email_off-->
 </body>
 </html>
 """
@@ -1309,6 +1327,7 @@ def page_contact() -> dict:
 
 <h2>Email</h2>
 <p><a href="mailto:{EMAIL}">{EMAIL}</a></p>
+<p>For legal, copyright or content complaints, write to <a href="mailto:{ABUSE}">{ABUSE}</a> instead.</p>
 
 <h2>What to send</h2>
 <p>The report link under each code opens a pre-filled email with the code already in the subject line, so you only need to add what went wrong. If you are writing from scratch, include the code in the subject.</p>
@@ -1323,7 +1342,7 @@ def page_contact() -> dict:
 <p>We are an independent fan site, not Roblox support and not the developer. We cannot restore a lost account, grant RP, unban you, or recover missing purchases. For account issues, use Roblox support or the {GAME['developer']} Discord.</p>
 
 <h2>Response time</h2>
-<p>Code reports are usually handled within 48 hours, and always before the next daily check. We do not send a reply to every report, but every one is read.</p>
+<p>Code reports are usually handled within 48 hours, and always before the next daily check. We do not send a reply to every report, but every one is read. Both addresses only receive mail; when we do reply, it comes from a personal mailbox rather than an automated address.</p>
 
 <div class="callout callout--warn">
   <p><strong>Never send your Roblox password.</strong> No one from this site will ever ask for it, and no legitimate code requires it.</p>
@@ -1459,6 +1478,7 @@ def build_local(pages: list, p404: dict) -> None:
 
 def build() -> None:
     # Validate before touching dist/, so a failed build leaves the last good site in place.
+    validate_contacts()
     validate_data()
     validate_ads()
 

@@ -169,13 +169,13 @@ python scripts\patrol.py                    # 正常跑（写快照 + 报告，�
    若你不想迁 NS，而是保留原注册商的 DNS：裸域必须用支持 CNAME/ALIAS-flattening 的解析服务才能指向 `pages.dev`，否则只能先挂 `www` 再把裸域 301 过去。这条策略请以 Cloudflare 当前文档为准。
 6. **等证书**：自定义域显示 Active 且证书签发完成（通常几分钟）后，`https://dragdrivecodes.space` 才可用。
 7. **回填 GSC**：在第 5 步生效后，做 Search Console 验证并提交 `https://dragdrivecodes.space/sitemap.xml`（或跑 `python scripts/gsc_submit.py`）。
-8. **邮箱**：`hello@dragdrivecodes.space` 目前只是占位。要么在 Cloudflare Email Routing / 你的邮箱服务里真的开通这个地址，要么改 `data/site.json` 的 `contact_email` 后重建。
+8. **邮箱**：`contact@dragdrivecodes.space`（通用）与 `abuse@dragdrivecodes.space`（法律/版权/内容投诉）已通过 Cloudflare Email Routing 转发到个人邮箱，均为 Active。地址配置在 `data/site.json` 的 `contact_email` / `abuse_email`，构建期会校验域名是否为本站域名。
 
 ## 上线还差的条件与授权（由你决定）
 
-1. DNS 尚未接入托管（清单见上）。
+1. DNS 已接入 Cloudflare（NS 为 `curt` / `daphne`），`dragdrivecodes.space` 与 `www` 已绑定 Pages 且 Active；`www` 通过 Redirect Rule 301 到 apex。
 2. 托管账号（Cloudflare Pages 免费额度足够）。
-3. 真实联系邮箱（当前 `hello@dragdrivecodes.space` 是**占位**，该地址是否可收信需你自己开通邮箱后再确认）。
+3. 联系邮箱已就绪：`contact@` 与 `abuse@` 经 Cloudflare Email Routing 转发，只负责收信，回复从个人邮箱发出。
 4. Google Search Console 验证 + 提交 `sitemap.xml`（脚本已备：`python scripts/gsc_submit.py --check`）。
 5. 分析工具（建议 Cloudflare Web Analytics，无 Cookie 免同意条；GA4 需加同意提示）。
 6. AdSense：账号申请、审核通过后把 pub-id 写入 `dist/ads.txt` 并插入广告代码。**当前只有 6 个内容页，审核偏薄，建议扩到 15+ 页再申请。** 受众含未成年人，勿开个性化定向、勿使用儿童定向标记。

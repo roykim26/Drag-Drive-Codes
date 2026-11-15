@@ -2,7 +2,8 @@
   "brand": "DragDriveCodes",
   "base_url": "https://dragdrivecodes.space",
   "last_checked": "2026-11-15",
-  "contact_email": "hello@dragdrivecodes.space",
+  "contact_email": "contact@dragdrivecodes.space",
+  "abuse_email": "abuse@dragdrivecodes.space",
   "ads": {
     "enabled": false,
     "client": "",

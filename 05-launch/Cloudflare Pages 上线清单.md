@@ -200,7 +200,7 @@ curl.exe -sI https://www.dragdrivecodes.space/ | Select-String "HTTP/|location"
 ### 6.5 手工点一遍
 
 - 手机开无痕模式访问首页，点一次 **Copy code**，确认变成 `Copied` 且剪贴板里有码。
-- 点一张卡片的 **Report a problem with this code**，确认弹出的邮件草稿里收件人是 `hello@dragdrivecodes.space`（**这个邮箱此时还没开通收信，见第 7 步**）。
+- 点一张卡片的 **Report a problem with this code**，确认弹出的邮件草稿里收件人是 `contact@dragdrivecodes.space`（码卡举报属「数据纠错」，归 contact@；`abuse@` 只用于法律/版权/内容投诉，见 `/contact/` 页）。
 - 浏览器标签页应显示 DD 徽章图标。
 
 ### 6.6 收尾
@@ -212,7 +212,7 @@ curl.exe -sI https://www.dragdrivecodes.space/ | Select-String "HTTP/|location"
 
 ## 7. 别忘了这两件事
 
-1. **邮箱**：`data/site.json` 的 `contact_email` 现在是 `hello@dragdrivecodes.space`，但**没有任何邮箱在收信**。要么在 Cloudflare Email Routing / 你的邮箱服务里真的开通这个地址，要么改成你能收信的地址后重新 `python build.py` 再部署。
+1. **邮箱**：`contact@dragdrivecodes.space` 与 `abuse@dragdrivecodes.space` 已通过 Cloudflare Email Routing 转发到个人邮箱（均 Active），配置在 `data/site.json` 的 `contact_email` / `abuse_email`。两个地址只收信，回复从个人邮箱发出。
 2. **`ads.txt`**：目前是纯注释占位。AdSense 审核通过后，把 `google.com, pub-XXXX, DIRECT, f08c47fec0942fa0` 那行填进 `build.py` 里的 `ads.txt` 写盘段落，重建再部署。
 
 ---

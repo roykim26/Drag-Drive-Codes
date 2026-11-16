@@ -68,6 +68,7 @@ LOCAL_NAMES.update({
     "/expired-codes/2026/": "expired-codes-2026.html",
     "/expired-codes/2025/": "expired-codes-2025.html",
     "/codes-not-working/": "codes-not-working.html",
+    "/updates/v1-2-0/": "updates-v1-2-0.html",
     "/updates/v1-1-9/": "updates-v1-1-9.html",
 })
 
@@ -145,10 +146,32 @@ UNCONFIRMED = CODES["unconfirmed"]
 EXPIRED_2026 = CODES["expired"]["2026"]
 EXPIRED_2025 = CODES["expired"]["2025"]
 TOTAL_EXPIRED = len(EXPIRED_2026) + len(EXPIRED_2025)
-RP_MIN = sum(c["reward_min"] for c in ACTIVE)
-RP_MAX = sum(c["reward_max"] for c in ACTIVE)
-SINGLE_MIN = min((c["reward_min"] for c in ACTIVE), default=0)
-SINGLE_MAX = max((c["reward_max"] for c in ACTIVE), default=0)
+KNOWN_REWARDS = [c for c in ACTIVE if c.get("reward_min")]
+UNPUBLISHED_REWARDS = len(ACTIVE) - len(KNOWN_REWARDS)
+RP_MIN = sum(c["reward_min"] for c in KNOWN_REWARDS)
+RP_MAX = sum(c["reward_max"] for c in KNOWN_REWARDS)
+SINGLE_MIN = min((c["reward_min"] for c in KNOWN_REWARDS), default=0)
+SINGLE_MAX = max((c["reward_max"] for c in KNOWN_REWARDS), default=0)
+RP_PREFIX = "at least " if UNPUBLISHED_REWARDS else ""
+
+STATUS_BADGE = {
+    "confirmed": ("ok", "Confirmed"),
+    "official": ("info", "Official page"),
+    "pending": ("warn", "Needs recheck"),
+    "reported": ("warn", "Reported"),
+}
+STATUS_WORD = {
+    "confirmed": "confirmed",
+    "official": "official",
+    "pending": "pending a recheck",
+    "reported": "reported",
+}
+STATUS_ROW = {
+    "confirmed": "Confirmed — two independent sources",
+    "official": "Official — named in the Roblox game description, single source",
+    "pending": "Needs recheck — listed earlier, not named in the current official description",
+    "reported": "Reported — single source, not yet cross-checked",
+}
 
 # Number words are derived, never hardcoded: the code count changes every few weeks.
 WORD_NUMBERS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six",
@@ -246,11 +269,16 @@ def validate_data() -> None:
             errors.append(f"{code}: no sources listed")
         if c.get("status") == "confirmed" and len(set(srcs)) < 2:
             errors.append(f"{code}: confirmed needs >=2 independent sources, has {len(set(srcs))}")
-        lo, hi = c.get("reward_min", 0), c.get("reward_max", 0)
-        if not isinstance(lo, int) or not isinstance(hi, int) or lo <= 0:
-            errors.append(f"{code}: reward_min must be a positive integer")
-        if hi < lo:
-            errors.append(f"{code}: reward_max ({hi}) is lower than reward_min ({lo})")
+        if c.get("status") == "official" and not any("official" in s.lower() for s in srcs):
+            errors.append(f"{code}: status 'official' needs a source that names the official page")
+        lo, hi = c.get("reward_min"), c.get("reward_max")
+        if (lo is None) != (hi is None):
+            errors.append(f"{code}: reward_min and reward_max must both be set or both be null")
+        elif lo is not None:
+            if not isinstance(lo, int) or not isinstance(hi, int) or lo <= 0:
+                errors.append(f"{code}: reward_min must be a positive integer")
+            if hi < lo:
+                errors.append(f"{code}: reward_max ({hi}) is lower than reward_min ({lo})")
         if c.get("last_verified", "") > CHECKED:
             errors.append(f"{code}: last_verified {c['last_verified']} is in the future (site last_checked {CHECKED})")
         if c.get("expired_on"):
@@ -266,7 +294,7 @@ def validate_data() -> None:
 
     # The templates branch on the list an entry sits in, the card branches on its status.
     for c in ACTIVE:
-        if c.get("status") != "confirmed":
+        if c.get("status") not in {"confirmed", "official", "pending"}:
             errors.append(f"{c['code']}: listed as active but status is '{c.get('status')}'")
     for c in UNCONFIRMED:
         if c.get("status") != "reported":
@@ -289,8 +317,8 @@ def validate_data() -> None:
 
 
 COUNT_PATTERNS = [
-    re.compile(r"\b(One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|Eleven|Twelve)\s+codes are confirmed\b"),
-    re.compile(r"\b(?:the|all)\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+confirmed codes\b", re.I),
+    re.compile(r"\b(One|Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|Eleven|Twelve)\s+codes are listed\b"),
+    re.compile(r"\b(?:the|all)\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+listed codes\b", re.I),
 ]
 
 
@@ -327,14 +355,18 @@ def rp_short(n: int) -> str:
 
 
 def reward_text(c: dict) -> str:
-    lo, hi = c["reward_min"], c["reward_max"]
+    lo, hi = c.get("reward_min"), c.get("reward_max")
+    if not lo:
+        return "Reward not published"
     if lo == hi:
         return rp_full(lo)
     return f"{rp_short(lo)} – {rp_short(hi)}"
 
 
 def reward_text_table(c: dict) -> str:
-    lo, hi = c["reward_min"], c["reward_max"]
+    lo, hi = c.get("reward_min"), c.get("reward_max")
+    if not lo:
+        return "Not published"
     if lo == hi:
         return f"{lo:,}"
     return f"{rp_short(lo)}–{rp_short(hi)}"
@@ -415,6 +447,8 @@ li{margin:0 0 6px}
 .code-card{position:relative;background:var(--bg-elev);border:1px solid var(--line);border-radius:var(--radius);padding:15px 16px 14px;margin:0 0 12px}
 .code-card::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:var(--line-strong)}
 .code-card[data-status=confirmed]::before{background:var(--ok)}
+.code-card[data-status=official]::before{background:var(--info)}
+.code-card[data-status=pending]::before{background:var(--warn)}
 .code-card[data-status=reported]::before{background:var(--warn)}
 .code-card__top{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-bottom:10px}
 .badge{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:999px;border:1px solid}
@@ -422,6 +456,7 @@ li{margin:0 0 6px}
 .badge--warn{color:var(--warn);border-color:rgba(255,176,32,.42);background:rgba(255,176,32,.1)}
 .badge--dead{color:var(--text-mute);border-color:var(--line-strong);background:rgba(110,123,143,.08)}
 .badge--tested{color:var(--info);border-color:rgba(90,169,255,.42);background:rgba(90,169,255,.1)}
+.badge--info{color:var(--info);border-color:rgba(90,169,255,.42);background:rgba(90,169,255,.1)}
 .meta{font-size:12px;color:var(--text-mute)}
 .code-card__row{display:flex;flex-direction:column;gap:12px}
 @media(min-width:640px){.code-card__row{flex-direction:row;align-items:center;justify-content:space-between;gap:16px}}
@@ -653,13 +688,16 @@ def footer() -> str:
 
 def code_card(c: dict, link_details: bool = True) -> str:
     status = c["status"]
-    badge = ('<span class="badge badge--ok">Confirmed</span>' if status == "confirmed"
-             else '<span class="badge badge--warn">Reported</span>')
+    badge_tone, badge_text = STATUS_BADGE[status]
+    badge = f'<span class="badge badge--{badge_tone}">{badge_text}</span>'
     tested = c.get("in_game_verified")
     tested_badge = (f'<span class="badge badge--tested">In-game tested {human(tested)}</span>'
                     if tested else "")
     n = len(c["sources"])
-    src_txt = f"{n} independent sources" if n > 1 else "1 tracker only"
+    if status == "official":
+        src_txt = "1 official source"
+    else:
+        src_txt = f"{n} independent sources" if n > 1 else "1 tracker only"
     return f"""<article class="code-card" data-status="{status}">
   <div class="code-card__top">
     {badge}
@@ -773,12 +811,15 @@ def page_home() -> dict:
         f"({name_list(UNCONFIRMED)}) and may already be expired." if UNCONFIRMED else "")
     faqs = [
         ("Are there any working Drag Drive Simulator codes right now?",
-         f"Yes. {count_word(len(ACTIVE), True)} codes were confirmed on {CHECKED_HUMAN} by the official Roblox game "
-         f"page and at least two independent trackers: {name_list(ACTIVE)}.{reported_note}"),
+         f"Yes. {count_word(len(ACTIVE), True)} codes are listed after the {GAME['version']} update: "
+         f"{name_list(ACTIVE)}. The V1.2.0 code comes from the official Roblox description; the others are carried "
+         f"over from V1.1.9 and flagged “Needs recheck” because the current description no longer names "
+         f"them.{reported_note}"),
         ("How much RP do all the codes give together?",
-         f"Between {RP_MIN // 1_000_000} million and {RP_MAX // 1_000_000} million RP, depending on which tracker's "
-         f"reward amounts are correct. Individual codes pay out between {SINGLE_MIN // 1_000_000} million and "
-         f"{SINGLE_MAX // 1_000_000} million RP, and each code can only be redeemed once per account."),
+         f"{RP_PREFIX.capitalize()}{RP_MIN // 1_000_000} to {RP_MAX // 1_000_000} million RP from the codes with a "
+         f"published reward; the V1.2.0 code has no published amount yet. Individual codes pay out between "
+         f"{SINGLE_MIN // 1_000_000} million and {SINGLE_MAX // 1_000_000} million RP, and each code can only be "
+         f"redeemed once per account."),
         ("Where do I enter a code in Drag Drive Simulator?",
          "Join any server, tap the Shop (shopping cart) icon along the bottom edge of the screen, open the Redeem tab "
          "at the top of the shop, paste the code into the text box, then press Redeem. The RP is credited immediately."),
@@ -788,8 +829,8 @@ def page_home() -> dict:
          "server and try again before assuming the code is dead."),
         ("When do new Drag Drive Simulator codes come out?",
          "The developer releases codes in three waves: a monthly code, a batch with each big update, and milestone codes "
-         "tied to likes. The official page currently says the next code arrives at 200,000 likes, and the game had "
-         "already passed 209,000 likes on 11 November 2026, so a new code is likely soon."),
+         "tied to likes. The official page currently says the next code arrives at 225,000 likes. The game showed "
+         "209,410 likes on 11 November 2026, so that milestone has not been reached yet."),
         ("Do Drag Drive Simulator codes expire?",
          f"Yes. Monthly and milestone codes usually last a few weeks to a few months. {len(EXPIRED_2026)} codes from "
          f"2026 and the entire 2025 archive are already dead, and we keep them on a separate expired page so this list "
@@ -807,21 +848,24 @@ def page_home() -> dict:
 <section class="hero">
   <p class="sec-label">Roblox · {GAME['name']}</p>
   <h1>Drag Drive Simulator Codes ({TITLE_MONTH} {CHECKED[:4]})</h1>
-  <p class="lede">{count_word(len(ACTIVE), True)} codes are confirmed by the official Roblox game page and at least two independent trackers. No account, no survey, no Robux — every code below pays out in RP.</p>
+  <p class="lede">{count_word(len(ACTIVE), True)} codes are listed after the {GAME['version']} update. The V1.2.0 code comes from the official Roblox description; the five earlier codes are marked “Needs recheck”. No account, no survey, no Robux.</p>
   <div class="stats">
-    <div class="stat"><b>{len(ACTIVE)}</b><span>Confirmed codes</span></div>
-    <div class="stat"><b>{RP_MIN // 1_000_000}–{RP_MAX // 1_000_000}M</b><span>RP available</span></div>
+    <div class="stat"><b>{len(ACTIVE)}</b><span>Codes listed</span></div>
+    <div class="stat"><b>{RP_MIN // 1_000_000}–{RP_MAX // 1_000_000}M</b><span>RP from published rewards</span></div>
     <div class="stat"><b>{CHECKED_HUMAN.split(' ')[0]} {CHECKED_HUMAN.split(' ')[1]}</b><span>Last checked</span></div>
   </div>
 </section>
 
 <h2>Working Drag Drive Simulator codes</h2>
-<p>Every code below was confirmed on {CHECKED_HUMAN}. Copy a code, then paste it into the Redeem tab inside the game.</p>
+<p>Every code below was checked on {CHECKED_HUMAN}. Copy a code, then paste it into the Redeem tab inside the game.</p>
 {cards}
 
 <div class="callout">
   <p><strong>How much you can trust this list.</strong> A code is marked <em>Confirmed</em> when the official game page
-  names it and at least two independent trackers list it as working. We are not a player account, so we do not run an
+  names it and at least two independent trackers list it as working. <em>Official page</em> means it is named in the
+  current Roblox description but has no second source yet, and the reward may not be published. <em>Needs recheck</em>
+  means it was named in an earlier official update but is missing from the current description: we keep it listed
+  because it may still work, but try it before relying on it. We are not a player account, so we do not run an
   in-game test on every code. When sources disagree about a code, or readers report that one is dead, we redeem it
   inside the game ourselves and the card shows the date that test passed. Roblox codes can die without notice, so each
   card also shows the date we last checked it. Found a dead code? Use the report link on the card.</p>
@@ -849,8 +893,8 @@ def page_home() -> dict:
 <p>{GAME['developer']} releases codes in three patterns, and knowing them is the fastest way to catch a new one early:</p>
 <ul>
   <li><b>Monthly codes.</b> Named after the month, for example DRAGDRIVESIMULATORSEPTEMBER26. No October or November 2026 monthly code had appeared when we last checked.</li>
-  <li><b>Update codes.</b> Each big update ships a batch. BETA V1.1.9 added five codes in one go.</li>
-  <li><b>Like milestones.</b> The official game page says the next code drops at 200,000 likes. It had already passed 209,000 likes on 11 November 2026, so that code could land any day.</li>
+  <li><b>Update codes.</b> Each big update ships a batch. BETA V1.2.0 names one code in the description and says four more exist without listing them.</li>
+  <li><b>Like milestones.</b> The official game page says the next code drops at 225,000 likes. On 11 November 2026 the game showed 209,410, so that code has not been released yet.</li>
 </ul>
 <p>New codes appear first in the game description on the <a href="{GAME['roblox_url']}" rel="noopener noreferrer" target="_blank">official Roblox page</a>, in the <a href="{GAME['discord_url']}" rel="noopener noreferrer" target="_blank">official Discord</a> (about 310,000 members), and in the <a href="{GAME['group_url']}" rel="noopener noreferrer" target="_blank">ADV Gamers Team group</a>. We check all three every day, and again within a few hours of any game update.</p>
 
@@ -921,7 +965,7 @@ def page_redeem() -> dict:
 </ol>
 
 <div class="callout callout--ok">
-  <p><strong>Fastest path:</strong> copy the code, keep this tab open, switch to Roblox, open Shop → Redeem, paste, confirm. You can redeem all {count_word(len(ACTIVE))} confirmed codes one after another without leaving the server.</p>
+  <p><strong>Fastest path:</strong> copy the code, keep this tab open, switch to Roblox, open Shop → Redeem, paste, confirm. You can redeem all {count_word(len(ACTIVE))} listed codes one after another without leaving the server.</p>
 </div>
 
 {ad_unit("redeem-mid")}
@@ -937,6 +981,7 @@ def page_redeem() -> dict:
   <li><a href="/">All working Drag Drive Simulator codes</a></li>
   <li><a href="/expired-codes/">Expired codes archive (2025 and 2026)</a></li>
   <li><a href="/codes-not-working/">Codes not working — the ordered checklist</a></li>
+  <li><a href="/updates/v1-2-0/">What changed in BETA V1.2.0</a></li>
   <li><a href="/updates/v1-1-9/">What changed in BETA V1.1.9</a></li>
   <li><a href="/rp-guide/">What RP is and how to earn more of it</a></li>
   <li><a href="/updates/">Update history and which update added which code</a></li>
@@ -1029,10 +1074,10 @@ def page_expired() -> dict:
 <p>Each code is also capped at one redemption per account, which is why a code can be “working” for a friend and invalid for you.</p>
 
 <h2>How to get RP without a working code</h2>
-<p>Codes are the fastest boost — the current batch is worth {RP_MIN // 1_000_000}–{RP_MAX // 1_000_000} million RP — but you can still earn RP in game through jobs and races. Our <a href="/rp-guide/">RP guide</a> covers the job types, what to spend RP on after the V1.1.9 update, and why you should never buy “RP generators”.</p>
+<p>Codes are the fastest boost — the current batch is worth {RP_PREFIX}{RP_MIN // 1_000_000}–{RP_MAX // 1_000_000} million RP from the codes with a published reward — but you can still earn RP in game through jobs and races. Our <a href="/rp-guide/">RP guide</a> covers the job types, what to spend RP on after the V1.2.0 update, and why you should never buy “RP generators”.</p>
 
 <div class="callout">
-  <p><strong>Looking for the current batch?</strong> The {count_word(len(ACTIVE))} confirmed codes are on the <a href="/">Drag Drive Simulator codes page</a>, each with the date we last checked it.</p>
+  <p><strong>Looking for the current batch?</strong> The {count_word(len(ACTIVE))} listed codes are on the <a href="/">Drag Drive Simulator codes page</a>, each with the date we last checked it.</p>
 </div>
 
 <h2>Frequently asked questions</h2>
@@ -1077,7 +1122,7 @@ def page_rp() -> dict:
 <p>RP is the main soft currency in {GAME['name']} ({GAME['aliases']}). You earn it by working jobs, racing and pulling stunts, then spend it on cars, motorbikes, garage slots and modifications. It is separate from Robux: RP is earned in game, Robux is bought with real money and only used for game passes.</p>
 
 <h2>How much RP the current codes give</h2>
-<p>The {count_word(len(ACTIVE))} confirmed codes are worth <b>{RP_MIN // 1_000_000}–{RP_MAX // 1_000_000} million RP</b> in total, depending on which tracker's reward amounts are accurate. That is enough to skip a large part of the early grind and buy a competitive car plus a first round of modifications.</p>
+<p>The {count_word(len(ACTIVE))} listed codes are worth <b>{RP_PREFIX}{RP_MIN // 1_000_000}–{RP_MAX // 1_000_000} million RP</b> in total from the rewards that have been published; the V1.2.0 code has no published amount yet. That is enough to skip a large part of the early grind and buy a competitive car plus a first round of modifications.</p>
 <p><a href="/">See the working codes and copy them →</a></p>
 
 <h2>Other ways to earn RP</h2>
@@ -1139,14 +1184,18 @@ def page_rp() -> dict:
 
 def page_updates() -> dict:
     slug = "/updates/"
-    title = "Drag Drive Simulator Update History & Codes (V1.1.6–V1.1.9)"
-    desc = ("Drag Drive Simulator update history from V1.1.6 to V1.1.9, which codes each update added, and when the "
+    title = "Drag Drive Simulator Update History & Codes (V1.1.6–V1.2.0)"
+    desc = ("Drag Drive Simulator update history from V1.1.6 to V1.2.0, which codes each update added, and when the "
             "next code is expected.")
     faqs = [
         ("What is the latest Drag Drive Simulator update?",
-         "BETA V1.1.9, the Wheelie Style x Big Update. It added a wheelie trick system with five styles, the Gatsu Street "
-         "map expansion in Surakarta, six limited special vehicles, a reworked rim and modification system, a new vehicle "
-         "camera and five redeem codes."),
+         "BETA V1.2.0, the Towing x Limited Update. The official description lists the Halloween 2026 limited drop, "
+         "a motocross off-road track on the Surakarta map, eight new limited special vehicles, new standard cars and "
+         "motorcycles, a modification system for backfire, rims, body material and accessories, a working motorcycle "
+         "towing hitch, a radio rework, stats and music phone apps, and five new redeem codes."),
+        ("How many codes did the V1.2.0 update add?",
+         "The official description says five new redeem codes and shows one of them, DRAGDRIVESIMULATORV1.2.0, next "
+         "to “+4 MORE CODES”. It does not list the other four, so we do not guess their values."),
         ("Did the October 2026 update add a code?",
          "No October code has appeared. The developer's event schedule lists updates at the end of June, July, August and "
          "September 2026, with no October entry, and no tracker lists a DRAGDRIVESIMULATOROCTOBER26 code."),
@@ -1166,10 +1215,16 @@ def page_updates() -> dict:
   <thead><tr><th scope="col">Version</th><th scope="col">Date</th><th scope="col">What changed</th><th scope="col">Codes</th></tr></thead>
   <tbody>
     <tr>
+      <td><b><a href="/updates/v1-2-0/">BETA V1.2.0</a></b><br><span class="meta">Towing x Limited Update</span></td>
+      <td>15 Nov 2026<br><span class="meta">page updated 16 Nov 2026</span></td>
+      <td>Halloween 2026 limited drop, Surakarta motocross off-road track, 8 new limited special vehicles, new standard cars and bikes, backfire/rims/body/accessory modification system, working motorcycle towing hitch, radio rework, stats and music phone apps</td>
+      <td>5 codes added — 1 named in the description (DRAGDRIVESIMULATORV1.2.0), 4 more announced but not listed</td>
+    </tr>
+    <tr>
       <td><b><a href="/updates/v1-1-9/">BETA V1.1.9</a></b><br><span class="meta">Wheelie Style x Big Update</span></td>
       <td>27 Sep 2026<br><span class="meta">page updated 9 Nov 2026</span></td>
       <td>Wheelie trick system with 5 styles, Gatsu Street map expansion, 6 limited special vehicles, new standard cars and bikes, reworked rims and modification system, first-person and 360 action camera, favourite vehicle spawner</td>
-      <td>5 codes added — the five now confirmed: DRAGDRIVESIMULATORSEPTEMBER26, HBDADVGAMERSTEAM26, DDSWHEELIESTYLEUPDATE, NEWGATSUMAPNEWMODIFICATION, DELAYDIKITLAGIFREESTYLE</td>
+      <td>5 codes added — all five are still listed but flagged “Needs recheck” after V1.2.0</td>
     </tr>
     <tr>
       <td><b>V1.1.8</b></td><td>29 Aug 2026</td>
@@ -1198,11 +1253,11 @@ def page_updates() -> dict:
 
 {ad_unit("updates-mid")}
 
-<h2>The October gap</h2>
-<p>Updates landed at the end of June, July, August and September 2026. There is no October entry in the event schedule, and no tracker lists a DRAGDRIVESIMULATOROCTOBER26 code. That gap is one reason the September batch is still the current one — and why the next milestone code matters.</p>
+<h2>From the October gap to V1.2.0</h2>
+<p>Updates landed at the end of June, July, August and September 2026. There is no October entry in the event schedule, and no tracker lists a DRAGDRIVESIMULATOROCTOBER26 code. The next update arrived on <b>15 November 2026</b> as BETA V1.2.0, almost seven weeks after V1.1.9.</p>
 
 <h2>What should arrive next</h2>
-<p>The official game description says the next code is tied to <b>200,000 likes</b>. On 11 November 2026 the game already showed more than 209,000 likes, so the milestone has technically been passed and the code is overdue. When it lands it will appear first in three places:</p>
+<p>The official game description says the next code is tied to <b>225,000 likes</b>. On 11 November 2026 the game showed <b>209,410</b> likes, so the milestone has not been reached yet. It also says the V1.2.0 update contains four more codes that the description does not list. When any of them lands it will appear first in three places:</p>
 <ul>
   <li>The game description on the <a href="{GAME['roblox_url']}" rel="noopener noreferrer" target="_blank">official Roblox page</a>.</li>
   <li>The <a href="{GAME['discord_url']}" rel="noopener noreferrer" target="_blank">official Discord</a> announcements channel.</li>
@@ -1211,7 +1266,7 @@ def page_updates() -> dict:
 <p>We check all three every day and again after each update, and update the <a href="/">active code list</a> with the date we confirmed it.</p>
 
 <h2>How updates affect existing codes</h2>
-<p>A new version usually retires the previous batch. Codes from V1.1.9 are the ones working now; anything named after an earlier month has already been moved to the <a href="/expired-codes/">expired archive</a>. If you find a code in an old video, check the archive before typing it.</p>
+<p>A new version usually retires the previous batch. V1.2.0 names only DRAGDRIVESIMULATORV1.2.0, and the five V1.1.9 codes no longer appear in the description. We have not deleted them: they are marked <b>Needs recheck</b> and stay on the <a href="/">code list</a> until a source or an in-game test proves they are dead. Anything from an earlier month has already been moved to the <a href="/expired-codes/">expired archive</a>.</p>
 
 <h2>Frequently asked questions</h2>
 {faq_block(faqs)}
@@ -1248,7 +1303,7 @@ def page_about() -> dict:
 <p>When a code is disputed, or a reader reports that one has stopped working, we redeem it inside the game ourselves and record the date. That in-game check is an extra piece of evidence, not a replacement for the source check — see the labels below.</p>
 
 <h2>What the labels mean</h2>
-<p>Every code on this site is in one of three states. The <span class="badge badge--tested">In-game tested</span> badge is not a fourth state: it is an extra marker that only appears on codes we have personally redeemed in the game.</p>
+<p>Every code on this site carries one of five labels. The <span class="badge badge--tested">In-game tested</span> badge is not one of them: it is an extra marker that only appears on codes we have personally redeemed in the game.</p>
 <div class="table-scroll">
 <table>
   <caption class="sr-only">How codes are labelled</caption>
@@ -1256,6 +1311,8 @@ def page_about() -> dict:
   <tbody>
     <tr><td><span class="badge badge--ok">Confirmed</span></td><td>The official game page names the code and at least two independent trackers list it as working</td><td>Very likely to work. Each card shows the date we last checked it.</td></tr>
     <tr><td><span class="badge badge--tested">In-game tested</span></td><td>We redeemed the code on a real account inside {GAME['name']}, the RP balance rose by the stated amount, and we logged the date</td><td>Strongest evidence we can show. Only some codes carry it — we do not test every code on every check.</td></tr>
+    <tr><td><span class="badge badge--info">Official page</span></td><td>The current official game description names the code, but no second independent source lists it yet</td><td>Almost certainly real. The reward may not be published yet, so the card says so instead of guessing.</td></tr>
+    <tr><td><span class="badge badge--warn">Needs recheck</span></td><td>An earlier official update named the code, but the current description does not</td><td>May still work. Kept on the list instead of being called dead, but try it before relying on it.</td></tr>
     <tr><td><span class="badge badge--warn">Reported</span></td><td>Only one tracker lists it, and the official page does not mention it</td><td>Might work. We keep it separate and label it clearly.</td></tr>
     <tr><td><span class="badge badge--dead">Expired</span></td><td>At least two trackers mark it expired, or the developer has replaced it</td><td>Will not work. Moved to the archive, never deleted.</td></tr>
   </tbody>
@@ -1272,7 +1329,7 @@ def page_about() -> dict:
 </ul>
 
 <h2>Why other sites list 50+ “active” codes</h2>
-<p>Some trackers keep a very long active list that mixes current codes with 2025 codes other sources mark as expired. A list of 50 codes looks generous, but it wastes the reader's time when most of them fail. We would rather show {count_word(len(ACTIVE))} codes that are confirmed than fifty that are not.</p>
+<p>Some trackers keep a very long active list that mixes current codes with 2025 codes other sources mark as expired. A list of 50 codes looks generous, but it wastes the reader's time when most of them fail. We would rather show {count_word(len(ACTIVE))} codes we can point to a source for than fifty that we cannot.</p>
 
 <h2>How often this site is updated</h2>
 <ul>
@@ -1378,10 +1435,20 @@ def page_code(c: dict) -> dict:
     """One page per active code, built only from the fields in codes.json."""
     slug = f"/codes/{CODE_SLUGS[c['code']]}/"
     others = [o for o in ACTIVE if o["code"] != c["code"]]
+    status_phrase = {"confirmed": "is a confirmed code",
+                     "official": "is an official code",
+                     "pending": "is a code pending a recheck",
+                     "reported": "is a reported code"}[c["status"]]
+    reward_clause = (f"worth {reward_text(c)}" if c.get("reward_min")
+                     else "whose reward has not been published yet")
+    status_note = ("It is named in the current official Roblox description."
+                   if c["status"] == "official" else
+                   "It is still listed because it may work, but the current official description does not name it."
+                   if c["status"] == "pending" else "")
     title = f"{c['code']} Code — Drag Drive Simulator"
-    desc = (f"{c['code']} is a {c['status']} Drag Drive Simulator code worth {reward_text(c)}. "
+    desc = (f"{c['code']} {status_phrase} Drag Drive Simulator code {reward_clause}. "
             f"Added {human(c['added'])}, last checked {human(c['last_verified'])}, "
-            f"with {len(c['sources'])} sources listed.")
+            f"with {len(c['sources'])} source{'s' if len(c['sources']) != 1 else ''} listed.")
     source_items = "".join(f"<li>{esc(s)}</li>" for s in c["sources"])
     tested = c.get("in_game_verified")
     tested_row = (f'<tr><td>Tested in game</td><td>{human(tested)}</td></tr>' if tested
@@ -1394,20 +1461,20 @@ def page_code(c: dict) -> dict:
 <section class="hero">
   <p class="sec-label">Single code</p>
   <h1><span class="code-name">{esc(c['code'])}</span> code for Drag Drive Simulator</h1>
-  <p class="lede">{esc(c['code'])} {('is a confirmed code' if c['status'] == 'confirmed' else 'is a reported code')} worth {esc(reward_text(c))}. It was added to our list on {human(c['added'])} and last checked on {human(c['last_verified'])}.</p>
+  <p class="lede">{esc(c['code'])} {status_phrase} {('worth ' + esc(reward_text(c))) if c.get('reward_min') else 'whose reward has not been published yet'}. It was added to our list on {human(c['added'])} and last checked on {human(c['last_verified'])}. {status_note}</p>
 </section>
 
 {code_card(c, link_details=False)}
 
 <h2>What this code gives</h2>
-<p>The reward is <b>{esc(reward_text(c))}</b>, and it is a one-off top-up: each account can redeem it once. RP is the game's main currency for buying vehicles and upgrades, so the fastest way to use it is to redeem first and then shop — the <a href="/rp-guide/">RP guide</a> explains what is worth buying with a first car.</p>
+{('<p>The reward is <b>' + esc(reward_text(c)) + '</b>, and it is a one-off top-up: each account can redeem it once. RP is the game\'s main currency for buying vehicles and upgrades, so the fastest way to use it is to redeem first and then shop — the <a href="/rp-guide/">RP guide</a> explains what is worth buying with a first car.</p>') if c.get('reward_min') else '<p>The studio has named this code in the official Roblox description but has not posted a reward amount. We do not guess amounts, so this page will show the value once a source publishes it. RP is the game\'s main currency for vehicles and upgrades; the <a href="/rp-guide/">RP guide</a> explains what a first purchase should be.</p>'}
 
 <h2>Status and where it comes from</h2>
 <div class="table-scroll">
 <table>
   <tbody>
-    <tr><td>Status</td><td>{('Confirmed — two independent sources' if c['status'] == 'confirmed' else 'Reported — single source, not yet cross-checked')}</td></tr>
-    <tr><td>Reward</td><td>{esc(reward_text(c))}</td></tr>
+    <tr><td>Status</td><td>{esc(STATUS_ROW[c['status']])}</td></tr>
+    <tr><td>Reward</td><td>{esc(reward_text_table(c))}</td></tr>
     <tr><td>Added to this list</td><td>{human(c['added'])}</td></tr>
     <tr><td>Last checked</td><td>{human(c['last_verified'])}</td></tr>
     {tested_row}
@@ -1545,16 +1612,17 @@ def page_update_v119() -> dict:
     title = "Drag Drive Simulator V1.1.9 Update — Wheelie Style & Codes"
     desc = ("What BETA V1.1.9 added to Drag Drive Simulator, the five codes that shipped with it, "
             "and how to tell whether a code from that batch still works.")
+    v119 = [c for c in ACTIVE if c.get("batch") == "V1.1.9"]
     rows = "".join(
         f'<tr><td class="code-cell"><a href="/codes/{CODE_SLUGS[c["code"]]}/">{esc(c["code"])}</a></td>'
-        f'<td>{reward_text_table(c)}</td><td>{esc("Confirmed" if c["status"] == "confirmed" else "Reported")}</td></tr>'
-        for c in ACTIVE
+        f'<td>{reward_text_table(c)}</td><td>{STATUS_BADGE[c["status"]][1]}</td></tr>'
+        for c in v119
     )
     body = f"""{breadcrumbs(slug, "V1.1.9")}
 <section class="hero">
   <p class="sec-label">Update log</p>
   <h1>BETA V1.1.9 — Wheelie Style x Big Update</h1>
-  <p class="lede">V1.1.9 is the update the current code batch belongs to. It added the wheelie trick system, expanded the Gatsu Street map, and shipped {count_word(len(ACTIVE))} codes in one go.</p>
+  <p class="lede">V1.1.9 was the update before V1.2.0. It added the wheelie trick system, expanded the Gatsu Street map, and shipped {count_word(len(v119))} codes in one go.</p>
 </section>
 
 <h2>What V1.1.9 added</h2>
@@ -1577,14 +1645,81 @@ def page_update_v119() -> dict:
 <p>Each of these has its own page with the reward, the sources it was recorded from, and the redeem steps. All of them are one per account.</p>
 
 <h2>Is a code from this batch still live?</h2>
-<p>V1.1.9 is the current version, so the batch is still the live one — but individual codes are retired as milestones pass. The <a href="/">code list</a> is re-checked daily; anything that stops working is moved to the <a href="/expired-codes/">expired archive</a> the same day. If a code fails while it is still listed, run the <a href="/codes-not-working/">not-working checklist</a> before assuming it is dead.</p>
+<p>V1.1.9 was replaced by <a href="/updates/v1-2-0/">BETA V1.2.0</a> on 15 November 2026, and none of these five codes appears in the current official description. We keep them listed with a <b>Needs recheck</b> label rather than deleting them, because an old code can keep working after it disappears from the description. The <a href="/">code list</a> is re-checked daily; anything proven dead is moved to the <a href="/expired-codes/">expired archive</a>. If one fails, run the <a href="/codes-not-working/">not-working checklist</a> before assuming it is dead.</p>
 
-<h2>Earlier updates</h2>
-<p>The <a href="/updates/">update history</a> covers V1.1.6 through V1.1.9 and what each one changed. Older batches are in the <a href="/expired-codes/">archive</a>.</p>
+<h2>Later updates</h2>
+<p>The <a href="/updates/">update history</a> covers V1.1.6 through V1.2.0 and what each one changed. Older batches are in the <a href="/expired-codes/">archive</a>.</p>
 """
     jsonld = org_jsonld() + base_jsonld(slug, title, desc) + [crumb_jsonld(slug, "V1.1.9")]
     return {"slug": slug, "title": title, "desc": desc, "body": body, "jsonld": jsonld,
             "out": "updates/v1-1-9/index.html"}
+
+
+def page_update_v120() -> dict:
+    """Only facts stated on the official Roblox description for BETA V1.2.0."""
+    slug = "/updates/v1-2-0/"
+    title = "Drag Drive Simulator V1.2.0 Update — Towing, Halloween & Codes"
+    desc = ("What BETA V1.2.0 added to Drag Drive Simulator, the one code the official description names, and the "
+            "four extra codes it announces without listing.")
+    v120 = [c for c in ACTIVE if c.get("batch") == "V1.2.0"]
+    v119 = [c for c in ACTIVE if c.get("batch") == "V1.1.9"]
+    rows = "".join(
+        f'<tr><td class="code-cell"><a href="/codes/{CODE_SLUGS[c["code"]]}/">{esc(c["code"])}</a></td>'
+        f'<td>{reward_text_table(c)}</td><td>{STATUS_BADGE[c["status"]][1]}</td></tr>'
+        for c in v120
+    )
+    carried = "".join(
+        f'<li><a href="/codes/{CODE_SLUGS[c["code"]]}/">{esc(c["code"])}</a> — {esc(reward_text_table(c))} RP</li>'
+        for c in v119
+    )
+    body = f"""{breadcrumbs(slug, "V1.2.0")}
+<section class="hero">
+  <p class="sec-label">Update log</p>
+  <h1>BETA V1.2.0 — Towing x Limited Update</h1>
+  <p class="lede">V1.2.0 is the current Drag Drive Simulator update, published on 15 November 2026. The official description calls it the Towing x Limited Update and says it added five redeem codes.</p>
+</section>
+
+<h2>What V1.2.0 added</h2>
+<ul>
+  <li><b>Halloween Special Limited Drop 2026</b> — a seasonal limited vehicle drop.</li>
+  <li><b>Map expansion: Surakarta</b> — a motocross off-road track.</li>
+  <li><b>Vehicles</b> — 8 new limited special vehicles, plus many new standard cars and motorcycles.</li>
+  <li><b>Modification system</b> — backfire, car rims, body material and accessories.</li>
+  <li><b>Custom backfire</b> — colour, flame kit, map and mode.</li>
+  <li><b>Motorcycle towing hitch</b> — a working hitch, not a cosmetic part.</li>
+  <li><b>Radio rework</b> and <b>new phone apps</b> — Stats and Music Radio.</li>
+  <li><b>Bug fixes</b> and smaller changes.</li>
+</ul>
+<p class="meta">Feature list taken from the official {esc(GAME['name'])} page on Roblox, checked {CHECKED_HUMAN}. We only list what that page states.</p>
+
+<h2>The codes in this update</h2>
+<div class="table-scroll">
+<table>
+  <thead><tr><th>Code</th><th>Reward</th><th>Status</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table>
+</div>
+<p>The description shows <b>DRAGDRIVESIMULATORV1.2.0</b> next to the line “+4 MORE CODES” and also says the update added five new redeem codes. The other four values are not written anywhere on the page, so we do not invent them. If they appear later, they will be added here with a source and a check date.</p>
+<p>The reward amount for this code is not published either. The code is listed as <b>Official page</b>: a single, strong source with no second source yet.</p>
+
+<h2>What happened to the five V1.1.9 codes</h2>
+<p>None of them appears in the current description. They are still on the site, marked <b>Needs recheck</b>, because a code can keep working after the description drops it:</p>
+<ul>{carried}
+</ul>
+<p>They cost nothing to attempt, and a code can keep working after the description drops it. The <a href="/codes-not-working/">not-working checklist</a> explains what to do if one fails.</p>
+
+<h2>What to do first</h2>
+<p>Redeem <b>DRAGDRIVESIMULATORV1.2.0</b> in the Redeem tab, then spend the RP on the new modification layer rather than a second car: rims, body material and backfire are cheap upgrades that apply to every vehicle you already own. The <a href="/rp-guide/">RP guide</a> has the full priority list, and the <a href="/how-to-redeem/">redeem guide</a> covers the two errors people hit most often.</p>
+
+<h2>Sources</h2>
+<ul class="sources">
+  <li>Official {esc(GAME['name'])} page on Roblox — version name, feature list and code announcement, checked {CHECKED_HUMAN}.</li>
+</ul>
+<p class="note">Last checked {CHECKED_HUMAN} (UTC). <a href="/updates/">Back to the update history</a>.</p>
+"""
+    jsonld = org_jsonld() + base_jsonld(slug, title, desc) + [crumb_jsonld(slug, "V1.2.0")]
+    return {"slug": slug, "title": title, "desc": desc, "body": body, "jsonld": jsonld,
+            "out": "updates/v1-2-0/index.html"}
 
 
 def page_404() -> dict:
@@ -1676,7 +1811,7 @@ def build_og_image(path: Path) -> None:
     d.text((156, 84), BRAND, font=f_brand, fill="#E8EDF5")
     d.text((64, 190), GAME["name"], font=f_h1, fill="#E8EDF5")
     d.text((64, 272), "Codes", font=f_h1, fill="#C8FF3D")
-    d.text((66, 372), f"{len(ACTIVE)} confirmed codes  ·  checked {CHECKED_HUMAN}", font=f_sub, fill="#98A4B7")
+    d.text((66, 372), f"{len(ACTIVE)} codes listed  ·  checked {CHECKED_HUMAN}", font=f_sub, fill="#98A4B7")
     d.rounded_rectangle([64, 452, 1136, 542], radius=12, fill="#11161F", outline="#232C3A", width=2)
     d.text((88, 476), ACTIVE[0]["code"], font=f_mono, fill="#E8EDF5")
     d.text((64, 570), "Unofficial fan site · not affiliated with Roblox or ADV Gamers Team", font=font(["segoeui.ttf"], 20), fill="#6E7B8F")
@@ -1718,7 +1853,7 @@ def build() -> None:
 
     pages = [page_home(), page_redeem(), page_expired(), page_rp(),
              page_updates(), page_about(), page_privacy(), page_contact(),
-             page_troubleshooting(), page_update_v119(),
+             page_troubleshooting(), page_update_v120(), page_update_v119(),
              page_expired_year("2026", EXPIRED_2026), page_expired_year("2025", EXPIRED_2025)]
     pages += [page_code(c) for c in ACTIVE]
     validate_pages(pages)
@@ -1747,7 +1882,7 @@ def build() -> None:
                '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     entries = [("/", "1.0")] + [(s, "0.8" if s == "/how-to-redeem/" else "0.6") for s, _ in urls]
     priority = {"/": "1.0", "/how-to-redeem/": "0.8", "/expired-codes/": "0.7",
-                "/codes-not-working/": "0.7", "/updates/": "0.7",
+                "/codes-not-working/": "0.7", "/updates/": "0.7", "/updates/v1-2-0/": "0.7",
                 "/expired-codes/2026/": "0.5", "/expired-codes/2025/": "0.5",
                 "/privacy/": "0.3", "/contact/": "0.4", "/about/": "0.4"}
     for slug, _ in entries:

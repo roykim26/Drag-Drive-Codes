@@ -1,28 +1,44 @@
 {
-  "verified_on": "2026-11-15",
+  "verified_on": "2026-11-16",
   "active": [
+    {
+      "code": "DRAGDRIVESIMULATORV1.2.0",
+      "reward_min": null,
+      "reward_max": null,
+      "status": "official",
+      "batch": "V1.2.0",
+      "added": "2026-11-16",
+      "last_verified": "2026-11-16",
+      "in_game_verified": null,
+      "sources": [
+        "Official Roblox game description (Drag Drive Simulator)"
+      ],
+      "note": "Named in the official Roblox description for BETA V1.2.0, next to \"+4 MORE CODES\". The description does not list those four codes or any reward amount for this one."
+    },
     {
       "code": "DRAGDRIVESIMULATORSEPTEMBER26",
       "reward_min": 35000000,
       "reward_max": 35000000,
-      "status": "confirmed",
+      "status": "pending",
+      "batch": "V1.1.9",
       "added": "2026-09-27",
-      "last_verified": "2026-11-15",
+      "last_verified": "2026-11-16",
       "in_game_verified": null,
       "sources": [
         "Official Roblox game page",
         "timesaver.gg",
         "rocodes.gg"
       ],
-      "note": "Named on the official Roblox page as the newest code, alongside four more from the V1.1.9 update."
+      "note": "Named on the official Roblox page in September 2026 as the newest code, alongside four more from the V1.1.9 update."
     },
     {
       "code": "HBDADVGAMERSTEAM26",
       "reward_min": 30000000,
       "reward_max": 60000000,
-      "status": "confirmed",
+      "status": "pending",
+      "batch": "V1.1.9",
       "added": "2026-09-27",
-      "last_verified": "2026-11-15",
+      "last_verified": "2026-11-16",
       "in_game_verified": null,
       "sources": [
         "Official Roblox game page",
@@ -35,9 +51,10 @@
       "code": "DDSWHEELIESTYLEUPDATE",
       "reward_min": 30000000,
       "reward_max": 30000000,
-      "status": "confirmed",
+      "status": "pending",
+      "batch": "V1.1.9",
       "added": "2026-09-27",
-      "last_verified": "2026-11-15",
+      "last_verified": "2026-11-16",
       "in_game_verified": null,
       "sources": [
         "Official Roblox game page",
@@ -50,9 +67,10 @@
       "code": "NEWGATSUMAPNEWMODIFICATION",
       "reward_min": 25000000,
       "reward_max": 35000000,
-      "status": "confirmed",
+      "status": "pending",
+      "batch": "V1.1.9",
       "added": "2026-09-27",
-      "last_verified": "2026-11-15",
+      "last_verified": "2026-11-16",
       "in_game_verified": null,
       "sources": [
         "Official Roblox game page",
@@ -65,9 +83,10 @@
       "code": "DELAYDIKITLAGIFREESTYLE",
       "reward_min": 20000000,
       "reward_max": 25000000,
-      "status": "confirmed",
+      "status": "pending",
+      "batch": "V1.1.9",
       "added": "2026-09-27",
-      "last_verified": "2026-11-15",
+      "last_verified": "2026-11-16",
       "in_game_verified": null,
       "sources": [
         "Official Roblox game page",
@@ -143,7 +162,7 @@
   },
   "milestones": {
     "likes": 209410,
-    "next_code_likes": 200000,
+    "next_code_likes": 225000,
     "discord_members": 309894
   }
 }

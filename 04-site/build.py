@@ -166,18 +166,21 @@ STATUS_BADGE = {
     "confirmed": ("ok", "Confirmed"),
     "official": ("info", "Official page"),
     "pending": ("warn", "Needs recheck"),
+    "thirdparty": ("warn", "Third-party"),
     "reported": ("warn", "Reported"),
 }
 STATUS_WORD = {
     "confirmed": "confirmed",
     "official": "official",
     "pending": "pending a recheck",
+    "thirdparty": "third-party",
     "reported": "reported",
 }
 STATUS_ROW = {
     "confirmed": "Confirmed — two independent sources",
     "official": "Official — named in the Roblox game description, single source",
     "pending": "Needs recheck — listed earlier, not named in the current official description",
+    "thirdparty": "Third-party — listed with identical spelling by independent fan sites, not named in the official description, not redeemed in-game by us",
     "reported": "Reported — single source, not yet cross-checked",
 }
 
@@ -302,8 +305,10 @@ def validate_data() -> None:
 
     # The templates branch on the list an entry sits in, the card branches on its status.
     for c in ACTIVE:
-        if c.get("status") not in {"confirmed", "official", "pending"}:
+        if c.get("status") not in {"confirmed", "official", "pending", "thirdparty"}:
             errors.append(f"{c['code']}: listed as active but status is '{c.get('status')}'")
+        if c.get("status") == "thirdparty" and len(set(c.get("sources") or [])) < 2:
+            errors.append(f"{c['code']}: third-party codes need >=2 independent sources")
     for c in UNCONFIRMED:
         if c.get("status") != "reported":
             errors.append(f"{c['code']}: listed as reported but status is '{c.get('status')}'")
@@ -457,6 +462,7 @@ li{margin:0 0 6px}
 .code-card[data-status=confirmed]::before{background:var(--ok)}
 .code-card[data-status=official]::before{background:var(--info)}
 .code-card[data-status=pending]::before{background:var(--warn)}
+.code-card[data-status=thirdparty]::before{background:var(--warn)}
 .code-card[data-status=reported]::before{background:var(--warn)}
 .code-card__top{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-bottom:10px}
 .badge{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:999px;border:1px solid}
@@ -811,8 +817,8 @@ def org_jsonld() -> list[dict]:
 def page_home() -> dict:
     slug = "/"
     title = f"Drag Drive Simulator Codes ({TITLE_MONTH} {CHECKED[:4]}) — All Working Codes"
-    desc = (f"All working Drag Drive Simulator codes for {TITLE_MONTH} {CHECKED[:4]}, checked against the official "
-            f"Roblox page and independent trackers. Copy a code and redeem RP in seconds.")
+    desc = (f"Drag Drive Simulator codes for {TITLE_MONTH} {CHECKED[:4]}, each labelled official or third-party "
+            f"and checked against the official Roblox page and independent trackers.")
     reported_note = (
         f" {count_word(len(UNCONFIRMED), True)} further "
         f"{'code is' if len(UNCONFIRMED) == 1 else 'codes are'} only reported by one tracker "
@@ -820,8 +826,10 @@ def page_home() -> dict:
     faqs = [
         ("Are there any working Drag Drive Simulator codes right now?",
          f"Yes. {count_word(len(ACTIVE), True)} codes are listed after the {GAME['version']} update: "
-         f"{name_list(ACTIVE)}. The V1.2.0 code comes from the official Roblox description; the others are carried "
-         f"over from V1.1.9 and flagged “Needs recheck” because the current description no longer names "
+         f"{name_list(ACTIVE)}. One V1.2.0 code comes from the official Roblox description; four more from the same "
+         f"batch are listed by fan sites with identical spelling and are labelled “Third-party”, because the "
+         f"description does not name them and we have not redeemed them in-game. The five V1.1.9 codes are flagged "
+         f"“Needs recheck” because the current description no longer names "
          f"them.{reported_note}"),
         ("How much RP do all the codes give together?",
          f"{RP_PREFIX.capitalize()}{RP_MIN // 1_000_000} to {RP_MAX // 1_000_000} million RP from the codes with a "
@@ -856,7 +864,7 @@ def page_home() -> dict:
 <section class="hero">
   <p class="sec-label">Roblox · {GAME['name']}</p>
   <h1>Drag Drive Simulator Codes ({TITLE_MONTH} {CHECKED[:4]})</h1>
-  <p class="lede">{count_word(len(ACTIVE), True)} codes are listed after the {GAME['version']} update. The V1.2.0 code comes from the official Roblox description; the five earlier codes are marked “Needs recheck”. No account, no survey, no Robux.</p>
+  <p class="lede">{count_word(len(ACTIVE), True)} codes are listed after the {GAME['version']} update. One comes from the official Roblox description; four more from the same batch are only listed by independent fan sites, not by the official page; the five earlier codes are marked “Needs recheck”. No account, no survey, no Robux.</p>
   <div class="stats">
     <div class="stat"><b>{len(ACTIVE)}</b><span>Codes listed</span></div>
     <div class="stat"><b>{RP_MIN // 1_000_000}–{RP_MAX // 1_000_000}M</b><span>RP from published rewards</span></div>
@@ -871,7 +879,9 @@ def page_home() -> dict:
 <div class="callout">
   <p><strong>How much you can trust this list.</strong> A code is marked <em>Confirmed</em> when the official game page
   names it and at least two independent trackers list it as working. <em>Official page</em> means it is named in the
-  current Roblox description but has no second source yet, and the reward may not be published. <em>Needs recheck</em>
+  current Roblox description but has no second source yet, and the reward may not be published. <em>Third-party</em>
+  means fan sites publish the code with identical spelling, but the official description does not name it and we have
+  not redeemed it in-game: try it, and expect it to be the least certain entry on the page. <em>Needs recheck</em>
   means it was named in an earlier official update but is missing from the current description: we keep it listed
   because it may still work, but try it before relying on it. We are not a player account, so we do not run an
   in-game test on every code. When sources disagree about a code, or readers report that one is dead, we redeem it
@@ -901,7 +911,7 @@ def page_home() -> dict:
 <p>{GAME['developer']} releases codes in three patterns, and knowing them is the fastest way to catch a new one early:</p>
 <ul>
   <li><b>Monthly codes.</b> Named after the month, for example DRAGDRIVESIMULATORSEPTEMBER26. No October or November 2026 monthly code had appeared when we last checked.</li>
-  <li><b>Update codes.</b> Each big update ships a batch. BETA V1.2.0 names one code in the description and says four more exist without listing them.</li>
+  <li><b>Update codes.</b> Each big update ships a batch. BETA V1.2.0 names one code in the description and says four more exist without listing them; fan sites publish those four with identical spelling, but the description still does not name them.</li>
   <li><b>Like milestones.</b> The official game page says the next code drops at 225,000 likes. On 11 November 2026 the game showed 209,410, so that code has not been released yet.</li>
 </ul>
 <p>New codes appear first in the game description on the <a href="{GAME['roblox_url']}" rel="noopener noreferrer" target="_blank">official Roblox page</a>, in the <a href="{GAME['discord_url']}" rel="noopener noreferrer" target="_blank">official Discord</a> (about 310,000 members), and in the <a href="{GAME['group_url']}" rel="noopener noreferrer" target="_blank">ADV Gamers Team group</a>. We check all three every day, and again within a few hours of any game update.</p>
@@ -914,6 +924,9 @@ def page_home() -> dict:
 <h2>Sources and verification</h2>
 <ul class="sources">
   <li><a href="{GAME['roblox_url']}" rel="noopener noreferrer" target="_blank">Official {GAME['name']} page on Roblox</a> — game description and version notes, checked {CHECKED_HUMAN}.</li>
+  <li><a href="https://www.pcgamesn.com/roblox/drag-drive-simulator-codes" rel="nofollow noopener noreferrer" target="_blank">PCGamesN</a> — five-code V1.2.0 batch, updated 15 Nov 2026.</li>
+  <li><a href="https://robloxden.com/game-codes/drag-drive-simulator" rel="nofollow noopener noreferrer" target="_blank">Roblox Den</a> — same batch, last checked 15 Nov 2026.</li>
+  <li><a href="https://game-zoom.net/drag-drive-simulator-kody.html" rel="nofollow noopener noreferrer" target="_blank">Game-Zoom</a> — same batch, updated 14 Nov 2026; spells the towing code without the leading NEW.</li>
   <li>timesaver.gg — code list and weekly re-check note, dated 11 Nov 2026.</li>
   <li>rocodes.gg — code list including the 2025 archive, dated 31 Oct 2026.</li>
   <li>urgametips.com — reward amounts and the one unconfirmed code, dated Nov 2026.</li>
@@ -1455,15 +1468,18 @@ def page_code(c: dict) -> dict:
     status_phrase = {"confirmed": "is a confirmed code",
                      "official": "is an official code",
                      "pending": "is a code pending a recheck",
+                     "thirdparty": "is a third-party code",
                      "reported": "is a reported code"}[c["status"]]
     reward_clause = (f"worth {reward_text(c)}" if c.get("reward_min")
                      else "whose reward has not been published yet")
     status_note = ("It is named in the current official Roblox description."
                    if c["status"] == "official" else
                    "It is still listed because it may work, but the current official description does not name it."
-                   if c["status"] == "pending" else "")
+                   if c["status"] == "pending" else
+                   "Independent fan sites list it with this exact spelling, but the official description does not name it and we have not redeemed it in-game."
+                   if c["status"] == "thirdparty" else "")
     title = f"{c['code']} Code — Drag Drive Simulator"
-    desc = (f"{c['code']} {status_phrase} Drag Drive Simulator code {reward_clause}. "
+    desc = (f"{c['code']} — Drag Drive Simulator code labelled {STATUS_BADGE[c['status']][1]}, {reward_clause}. "
             f"Added {human(c['added'])}, last checked {human(c['last_verified'])}, "
             f"with {len(c['sources'])} source{'s' if len(c['sources']) != 1 else ''} listed.")
     source_items = "".join(f"<li>{esc(s)}</li>" for s in c["sources"])
@@ -1487,7 +1503,7 @@ def page_code(c: dict) -> dict:
 {code_card(c, link_details=False)}
 
 <h2>What this code gives</h2>
-{('<p>The reward is <b>' + esc(reward_text(c)) + '</b>, and it is a one-off top-up: each account can redeem it once. RP is the game\'s main currency for buying vehicles and upgrades, so the fastest way to use it is to redeem first and then shop — the <a href="/rp-guide/">RP guide</a> explains what is worth buying with a first car.</p>') if c.get('reward_min') else '<p>The studio has named this code in the official Roblox description but has not posted a reward amount. We do not guess amounts, so this page will show the value once a source publishes it. RP is the game\'s main currency for vehicles and upgrades; the <a href="/rp-guide/">RP guide</a> explains what a first purchase should be.</p>'}
+{('<p>The reward is <b>' + esc(reward_text(c)) + '</b>, and it is a one-off top-up: each account can redeem it once. RP is the game\'s main currency for buying vehicles and upgrades, so the fastest way to use it is to redeem first and then shop — the <a href="/rp-guide/">RP guide</a> explains what is worth buying with a first car.</p>') if c.get('reward_min') else ('<p>Fan sites list a reward for this code, but the studio has not published an amount, so the card stays blank rather than repeat an unconfirmed number. RP is the game\'s main currency for vehicles and upgrades; the <a href="/rp-guide/">RP guide</a> explains what a first purchase should be.</p>' if c['status'] == 'thirdparty' else '<p>The studio has named this code in the official Roblox description but has not posted a reward amount. We do not guess amounts, so this page will show the value once a source publishes it. RP is the game\'s main currency for vehicles and upgrades; the <a href="/rp-guide/">RP guide</a> explains what a first purchase should be.</p>')}
 
 <h2>Status and where it comes from</h2>
 <div class="table-scroll">

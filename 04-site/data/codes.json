@@ -16,6 +16,69 @@
       "note": "Named in the official Roblox description for BETA V1.2.0, next to \"+4 MORE CODES\". The description does not list those four codes or any reward amount for this one."
     },
     {
+      "code": "DDSTHX200KROADTO225KLIKES",
+      "reward_min": null,
+      "reward_max": null,
+      "status": "thirdparty",
+      "batch": "V1.2.0",
+      "added": "2026-11-16",
+      "last_verified": "2026-11-16",
+      "in_game_verified": null,
+      "sources": [
+        "PCGamesN codes page, updated 2026-11-15 (https://www.pcgamesn.com/roblox/drag-drive-simulator-codes)",
+        "Roblox Den codes page, checked 2026-11-15 (https://robloxden.com/game-codes/drag-drive-simulator)",
+        "Game-Zoom codes page, updated 2026-11-14 (https://game-zoom.net/drag-drive-simulator-kody.html)"
+      ],
+      "note": "Not named in the official description. Three independent sites list this exact spelling for the 225,000-like milestone. Rewards quoted by those sites differ (100M RP on two, unquantified on the third), so no amount is published here. Not redeemed in-game by us."
+    },
+    {
+      "code": "DDSHALLOWEEN2026",
+      "reward_min": null,
+      "reward_max": null,
+      "status": "thirdparty",
+      "batch": "V1.2.0",
+      "added": "2026-11-16",
+      "last_verified": "2026-11-16",
+      "in_game_verified": null,
+      "sources": [
+        "PCGamesN codes page, updated 2026-11-15 (https://www.pcgamesn.com/roblox/drag-drive-simulator-codes)",
+        "Roblox Den codes page, checked 2026-11-15 (https://robloxden.com/game-codes/drag-drive-simulator)",
+        "Game-Zoom codes page, updated 2026-11-14 (https://game-zoom.net/drag-drive-simulator-kody.html)"
+      ],
+      "note": "Not named in the official description. Three independent sites list this exact spelling. Two quote 35M RP; the official page publishes no amount, so the card stays blank. Not redeemed in-game by us."
+    },
+    {
+      "code": "DELAYDIKITLAGIOFFROAD",
+      "reward_min": null,
+      "reward_max": null,
+      "status": "thirdparty",
+      "batch": "V1.2.0",
+      "added": "2026-11-16",
+      "last_verified": "2026-11-16",
+      "in_game_verified": null,
+      "sources": [
+        "PCGamesN codes page, updated 2026-11-15 (https://www.pcgamesn.com/roblox/drag-drive-simulator-codes)",
+        "Roblox Den codes page, checked 2026-11-15 (https://robloxden.com/game-codes/drag-drive-simulator)",
+        "Game-Zoom codes page, updated 2026-11-14 (https://game-zoom.net/drag-drive-simulator-kody.html)"
+      ],
+      "note": "Not named in the official description. Three independent sites list this exact spelling. Two quote 25M RP; the official page publishes no amount. Not redeemed in-game by us."
+    },
+    {
+      "code": "NEWTOWINGNEWBACKFIRE",
+      "reward_min": null,
+      "reward_max": null,
+      "status": "thirdparty",
+      "batch": "V1.2.0",
+      "added": "2026-11-16",
+      "last_verified": "2026-11-16",
+      "in_game_verified": null,
+      "sources": [
+        "PCGamesN codes page, updated 2026-11-15 (https://www.pcgamesn.com/roblox/drag-drive-simulator-codes)",
+        "Roblox Den codes page, checked 2026-11-15 (https://robloxden.com/game-codes/drag-drive-simulator)"
+      ],
+      "note": "Not named in the official description. Two sites list NEWTOWINGNEWBACKFIRE; Game-Zoom lists TOWINGNEWBACKFIRE without the leading NEW. The two matching spellings are used here, but this is the least certain entry in the batch - try both spellings. Not redeemed in-game by us."
+    },
+    {
       "code": "DRAGDRIVESIMULATORSEPTEMBER26",
       "reward_min": 35000000,
       "reward_max": 35000000,

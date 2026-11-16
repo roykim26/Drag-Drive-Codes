@@ -11,6 +11,9 @@ ddc-seo-*.json
 .env
 .env.*
 
+# Local secrets (server access, scratch notes). Never commit.
+.local/
+
 # Local preview artefacts / screenshots (reproducible, not source)
 preview/*.png
 *.local

@@ -10,5 +10,8 @@ gsc-oauth-token.json
 .env
 .env.*
 
+# Local secrets (server access, scratch notes). Never commit.
+.local/
+
 # Local preview artefacts
 preview/*.png

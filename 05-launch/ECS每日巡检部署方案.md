@@ -1,9 +1,9 @@
-# 每日巡检脚本 · 东京 ECS 部署方案（只出方案，未连服务器、未装任何东西）
+# 每日巡检脚本 · 东京 ECS 部署方案
 
-- 日期：2026-11-15
-- 目标机器：阿里云**国内站账号**购买的**东京地域**节点（操作系统、Python 版本、是否有公网 IP 均未知，见 §0）
+- 日期：2026-11-15 成稿；2026-11-16 按实际服务器落地并逐节核对
+- 目标机器：阿里云**国内站账号**购买的**东京地域**节点（实测环境见 §0）
 - 上游流程依据：`02-product/码源获取与更新机制.md`（码源清单、三级核验、节奏）
-- 本文不含真实凭证、不连接任何主机；所有命令都会标明 **【服务器】** 或 **【本地】**
+- 本文不含真实凭证；所有命令都会标明 **【服务器】** 或 **【本地】**
 
 > **脚本状态（2026-11-16 核对）**：巡检脚本已实现并自测通过，路径 `04-site/scripts/patrol.py`（仅标准库，无需 pip）。本文 §4.4 的骨架已删除，实际参数以脚本 `--help` 为准：`--once`、`--dry-run`、`--snapshot-file`、`--base-dir`、`--codes-file`、`--universe`、`--keep`、`--alert`、`--no-notify`、`--exit-zero`、`--json`。退出码只有三个：**0 正常、10 有候选待确认、30 拉取/解析失败**。文档旧版写的「40 静默超 36h」在脚本里**不存在**：静默 >36h 只在成功运行里追加一条提醒并推 webhook，退出码不变。目录不可写属于未捕获异常，会以 Python 的 1 退出并打印 traceback，不是 40。
 
@@ -22,10 +22,12 @@ timedatectl
 | 要确认的 | 为什么 |
 |---|---|
 | 发行版 | 决定包管理（`apt` / `dnf`）、Python 默认版本、systemd 版本 |
-| `python3 --version` | 本方案只用标准库，最低要求 **3.9+**（3.8 已 EOL，且 `zoneinfo` 需要 3.9） |
+| `python3 --version` | 本方案只用标准库，最低要求 **3.8+**。注意**系统自带的 `python3` 不一定是 3.8**，本机是 3.6.8，需要另装 `python38` 模块，见 §1 |
 | `timedatectl` 输出里的 `Time zone` | **最关键**。阿里云国内站账号的海外节点，镜像时区可能是 `UTC` 也可能是 `Asia/Shanghai`，取决于你选的镜像，**不能假设**。所有定时表达式按这里的结果写 |
 
-> 时区结论先记下来：若显示 `UTC` → 用 §3 的 UTC 表达式；若显示 `Asia/Shanghai` → 必须先改（见 §3.1），否则「每天 09:10」会变成北京时间 09:10，也就是东京时间 10:10、UTC 01:10。
+> 实测（2026-11-16）：Alibaba Cloud Linux 3（OpenAnolis 内核）、systemd 239、`Asia/Shanghai (CST, +0800)`、系统 `python3` **3.6.8**、`dnf module install python38` 后得到 `/usr/bin/python3.8`（**3.8.17**）、`games.roblox.com` 可达、40 GB 盘空闲 29 GB、80/443 已被 Docker 占用（本方案不监听任何端口，无冲突）。
+
+> 时区结论先记下来：本机是 `Asia/Shanghai`，**不改系统时区**；timer 的 `OnCalendar` 显式带 `UTC` 后缀，与机器时区解耦（原因见 §3.1）。
 
 ---
 
@@ -33,11 +35,21 @@ timedatectl
 
 | 项 | 结论 |
 |---|---|
-| Python | 3.9+，系统自带即可 |
+| Python | **3.8+**。本机装 `python38` 模块后用 `/usr/bin/python3.8`（3.8.17）；系统自带 `python3` 是 3.6.8，**本方案不使用**（脚本里有 `from __future__ import annotations`，3.6 直接起不来） |
 | 第三方依赖 | **零**。只用 `urllib.request` / `json` / `re` / `difflib` / `pathlib` / `argparse` / `hashlib` / `datetime` |
 | 虚拟环境 | 不需要（无依赖就没有隔离问题，也少一个每月要重建的 venv） |
 | 网络出口 | 服务器需要能访问 `games.roblox.com`（东京节点通常可达；若不通，见 §6 的失败处理） |
 | 磁盘 | 快照 + 报告都是几十 KB/天，预留 100 MB 足够 |
+
+**【服务器】** 安装 3.8 解释器（**不动**系统自带的 `python3`，也不改 `/usr/bin/python3` 链接）
+
+```bash
+sudo dnf module install -y python38
+/usr/bin/python3.8 --version    # 期望：Python 3.8.17
+python3 --version               # 仍然是 3.6.8，本方案不用它
+```
+
+> 为什么不升级系统 `python3`：这台机器上 Docker 在跑，升级系统解释器会影响其他程序的依赖，收益只是「少写一个绝对路径」。所以本方案所有调用点（wrapper、alert unit）都写死 `/usr/bin/python3.8`，与系统 `python3` 并存互不影响。
 
 **为什么不装依赖**：这台机器只做"取快照 + 出清单"，不做构建。少一个包就少一次 `pip` 升级把脚本跑挂的机会。
 
@@ -85,18 +97,23 @@ sudo install -m 0640 -o root -g ddc /tmp/codes.json /etc/ddc-patrol/codes.json
 
 **结论：用 systemd timer。** 只有当你的镜像没有 systemd（极少见）时才退回 cron，写法见 §3.4。
 
-### 3.1 先把时区钉死
+### 3.1 不改系统时区，定时表达式显式带 `UTC` 后缀
 
-**【服务器】**
+本机时区是 `Asia/Shanghai (CST, +0800)`，**保持原样**：
 
 ```bash
-sudo timedatectl set-timezone UTC
-timedatectl | grep "Time zone"
+timedatectl | grep "Time zone"    # Time zone: Asia/Shanghai (CST, +0800)
 ```
 
-理由：站点的「Last checked」、sitemap 的 `lastmod`、快照文件名**本来就用 UTC**（`data/site.json` 的 `last_checked` 是 UTC 日期）。机器也统一 UTC，日志、文件名、cron 表达式就只有一套坐标，不会出现"报告日期和站点日期差一天"。
+理由：
 
-> 如果你坚持让机器显示 JST：`sudo timedatectl set-timezone Asia/Tokyo`。那么下面所有 `UTC` 后缀都要删掉或改成 `Asia/Tokyo`，并且把 `00:10` 改成 `09:10`。
+- 这台机器上还有 Docker 在跑（80/443 已被占用）。改系统时区会影响所有运行中的容器、日志时间戳和别的定时任务，而收益为零。
+- systemd 的 `OnCalendar` 支持**显式时区后缀**，`*-*-* 00:10:00 UTC` 在任何机器时区下都表示 00:10 UTC，不需要靠改系统时区来对齐。
+- 站点的「Last checked」、sitemap 的 `lastmod`、快照文件名本来就用 UTC；定时器也用 UTC，报告的日期口径和站点一致。机器本地时间只影响 `journalctl` 的默认显示。
+
+要看 UTC 时间的日志：`journalctl -u ddc-patrol.service --utc`。
+
+> 反过来说，**如果你以后真的改了系统时区，timer 不需要跟着改** —— 这就是带后缀的好处。只有 §3.4 的 cron 备用方案必须按机器本地时区重算。
 
 ### 3.2 要跑在几点
 
@@ -116,11 +133,13 @@ timedatectl | grep "Time zone"
 set -eu
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export PYTHONUNBUFFERED=1
+export PYTHONDONTWRITEBYTECODE=1
 umask 027
 
 # 固定参数：单次运行、不因「有候选码」让 systemd 记 failed、用只读码表做集合差。
 # 额外参数（如 --dry-run）会追加在后面，便于手工排障。
-exec /usr/bin/python3 /opt/ddc-patrol/patrol.py \
+# 解释器写死 3.8：系统 python3 是 3.6，跑不了这个脚本。
+exec /usr/bin/python3.8 /opt/ddc-patrol/patrol.py \
   --once \
   --exit-zero \
   --codes-file /etc/ddc-patrol/codes.json \
@@ -153,7 +172,6 @@ WorkingDirectory=/var/lib/ddc-patrol
 EnvironmentFile=/etc/ddc-patrol/patrol.env
 ExecStart=/opt/ddc-patrol/run-patrol.sh
 TimeoutStartSec=180
-RuntimeMaxSec=300
 UMask=0027
 # 只允许写这两个目录，其余文件系统只读
 ProtectSystem=strict
@@ -191,7 +209,7 @@ Type=oneshot
 User=ddc
 Group=ddc
 EnvironmentFile=/etc/ddc-patrol/patrol.env
-ExecStart=/usr/bin/python3 /opt/ddc-patrol/patrol.py --alert "%i failed"
+ExecStart=/usr/bin/python3.8 /opt/ddc-patrol/patrol.py --alert "%i failed"
 ```
 
 ### 3.4 等价的 cron 写法（仅备用）
@@ -199,9 +217,9 @@ ExecStart=/usr/bin/python3 /opt/ddc-patrol/patrol.py --alert "%i failed"
 **【服务器】** `sudo crontab -u ddc -e`
 
 ```cron
-# 机器时区必须是 UTC（timedatectl 确认过）。00:10 UTC = 09:10 JST
+# 机器时区是 Asia/Shanghai（CST，+0800），cron 只认本地时区：08:10 CST = 00:10 UTC
 # cron 不读 systemd 的 EnvironmentFile，必须自己 source；wrapper 负责 PATH 与 --codes-file
-10 0 * * * set -a; . /etc/ddc-patrol/patrol.env; set +a; /opt/ddc-patrol/run-patrol.sh >> /var/lib/ddc-patrol/reports/cron.log 2>&1
+10 8 * * * set -a; . /etc/ddc-patrol/patrol.env; set +a; /opt/ddc-patrol/run-patrol.sh >> /var/lib/ddc-patrol/reports/cron.log 2>&1
 ```
 
 cron 的坑：漏跑不补、日志要自己转、环境变量为空（所以 wrapper 里显式设了 `PATH`）、失败没有告警（需要额外加 `|| /opt/ddc-patrol/run-patrol.sh --alert "cron failed"`）。
@@ -331,15 +349,17 @@ curl -s -X POST "$DDC_WEBHOOK_URL" \
 
 ```bash
 sudo tee /etc/ddc-patrol/patrol.env >/dev/null <<'EOF'
-DDC_WEBHOOK_URL=https://example.invalid/REPLACE_ME
+DDC_WEBHOOK_URL=
 EOF
 sudo chown root:ddc /etc/ddc-patrol/patrol.env
 sudo chmod 0640 /etc/ddc-patrol/patrol.env
 ```
 
-> 上面是**占位值**，`example.invalid` 是保留域名，保证你忘了改也不会真发出去。
+> 当前状态（2026-11-16）：**留空**。用户还没提供飞书机器人地址，所以只写报告、不发通知。留空不是错误，脚本会打印 `notify: skipped (DDC_WEBHOOK_URL not set)`，巡检本身照常完成。
 >
-> **变量名是 `DDC_WEBHOOK_URL`**（D-D-C，DragDriveCodes 的首字母），不是 `DDD_`。脚本只读这一个名字，写成 `DDD_WEBHOOK_URL` 不会报错，只会打印 `notify: skipped (DDC_WEBHOOK_URL not set)`，等于静默漏掉所有告警。
+> 拿到 webhook 后只需改这一个文件（`DDC_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/…`），不用重启 timer，下一次触发就生效。
+>
+> 变量名是 **`DDC_WEBHOOK_URL`**（D-D-C，DragDriveCodes 的首字母），不是 `DDD_`。脚本只读这一个名字，写成 `DDD_WEBHOOK_URL` 不会报错，只会打印 `notify: skipped`，等于静默漏掉所有告警。
 >
 > 旧版这里还有一个 `DDC_NOTIFY=1`，脚本从未读取，已删除。
 
@@ -376,17 +396,18 @@ journalctl -u ddc-patrol.service --since "7 days ago" | grep -c "fetch failed"
 
 | # | 命令 | 应该看到 |
 |---|---|---|
-| 1 | `sudo -u ddc python3 -m py_compile /opt/ddc-patrol/patrol.py` | 无输出 = 语法通过 |
+| 1 | `sudo -u ddc /usr/bin/python3.8 -c "import ast; ast.parse(open('/opt/ddc-patrol/patrol.py').read())"` | 无输出 = 语法通过。**不要用 `python3 -m py_compile`**：它会在 `/opt/ddc-patrol` 写 `__pycache__`，而该目录对 `ddc` 只读，会报 `PermissionError` |
 | 2 | `sudo -u ddc /opt/ddc-patrol/run-patrol.sh --dry-run` | 打印本次快照摘要，**不写** `state.json`；`snapshots/` 里不新增文件 |
 | 3 | `sudo -u ddc /opt/ddc-patrol/run-patrol.sh` | 退出码 0（wrapper 带 `--exit-zero`）；`reports/<今天>.md` 生成；`snapshots/` 有新 json |
 | 4 | `ls -l /var/lib/ddc-patrol/reports/` | 文件属主是 `ddc`，权限 640 |
 | 5 | `sudo systemctl daemon-reload && sudo systemctl start ddc-patrol.service` | `systemctl status` 显示 `inactive (dead)` 且 `Result=success`（oneshot 正常结束就是 dead） |
 | 6 | `journalctl -u ddc-patrol.service -n 20` | 有你脚本打印的摘要，没有 traceback；且不应出现 `codes file not found` |
 | 7 | `sudo systemctl enable --now ddc-patrol.timer` | `Created symlink … timers.target.wants/` |
-| 8 | `systemctl list-timers ddc-patrol.timer` | `NEXT` 列是**明天 00:10 UTC**（换算成你本地时间是次日 08:10 北京时间） |
+| 8 | `systemctl list-timers ddc-patrol.timer` | `NEXT` 列是**次日 00:10 UTC**（= 北京时间 08:10；`RandomizedDelaySec=120` 会再抖动 ≤2 分钟，所以 08:10–08:12 都正常） |
 | 9 | `systemctl show ddc-patrol.timer -p NextElapseUSecRealtime` | 一个具体时间戳，用 `date -u -d @<秒>` 核对是否 00:10 UTC |
-| 10 | 故障演练：`sudo -u ddc /opt/ddc-patrol/run-patrol.sh --snapshot-file /nonexistent.json` | 退出码 30（`--exit-zero` 不影响失败路径）；webhook 收到一条失败消息；`state.json` 的 `last_success` **没变** |
-| 11 | `sudo systemctl stop ddc-patrol.timer`（演练结束）→ 再 `start` | 恢复 |
+| 10 | 故障演练 A（脚本失败路径）：`sudo -u ddc /opt/ddc-patrol/run-patrol.sh --snapshot-file /nonexistent.json` | 退出码 30；打印 `notify: skipped (DDC_WEBHOOK_URL not set)`（未配 webhook 时）；`state.json` 的 `last_success` **没变** |
+| 11 | 故障演练 B（OnFailure 链路）：`sudo cp -a /etc/systemd/system/ddc-patrol.service /tmp/svc.bak` → `sudo sed -i 's#^ExecStart=.*#ExecStart=/opt/ddc-patrol/run-patrol.sh --snapshot-file /nonexistent.json#' /etc/systemd/system/ddc-patrol.service` → `sudo systemctl daemon-reload && sudo systemctl start ddc-patrol.service` → `journalctl -u 'ddc-patrol-alert@*' --since '-2 min'` → `sudo cp /tmp/svc.bak /etc/systemd/system/ddc-patrol.service && sudo systemctl daemon-reload` | `systemctl show` 是 `Result=exit-code`、`ExecMainStatus=30`、`ActiveState=failed`；`ddc-patrol-alert@ddc-patrol.service.service` 被自动拉起并打印 `notify: skipped`（未配 webhook 时）；`state.json` 的 `last_success` **没变**；还原后再跑一次恢复 `success` |
+| 12 | `sudo systemctl stop ddc-patrol.timer`（演练结束）→ 再 `start` | 恢复 |
 
 第 8、9 步就是防"时区跑偏"的验收点：**如果 `NEXT` 显示的不是你想要的时刻，先回去改 §3.3 的 `OnCalendar`，不要改机器时区来回试。**
 

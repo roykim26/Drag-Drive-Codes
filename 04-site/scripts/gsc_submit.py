@@ -16,9 +16,17 @@ The service account must be added as a user (at least "Full" permission) on the
 Search Console property. Adding it as an owner of the Google Cloud project is not
 enough — it has to be a user of the Search Console property itself.
 
+The property identifier is read from `gsc_property` in data/site.json. Two forms:
+  - domain property:       sc-domain:dragdrivecodes.space
+  - URL-prefix property:   https://dragdrivecodes.space/
+The sitemap feed path is always the full URL, independent of the property form.
+If `gsc_property` is absent, the script falls back to the URL-prefix form.
+
 Usage:
     python scripts/gsc_submit.py --check      # preconditions only, sends nothing
     python scripts/gsc_submit.py --dry-run    # formats the request, sends nothing
+    python scripts/gsc_submit.py --status     # read-only: sitemaps list + counts
+    python scripts/gsc_submit.py --inspect    # read-only: URL Inspection for every sitemap URL
     python scripts/gsc_submit.py              # actually submits the sitemap
 
 Exit codes: 0 = submitted or all preconditions met, 1 = blocked / not verified,
@@ -30,6 +38,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -41,6 +50,8 @@ LOCAL_CRED = SITE_ROOT / "gsc-service-account.json"
 SITEMAP_PATH = "/sitemap.xml"
 SCOPES = ["https://www.googleapis.com/auth/webmasters"]
 API = "https://www.googleapis.com/webmasters/v3/sites/{site}/sitemaps/{feed}"
+SITEMAPS_API = "https://www.googleapis.com/webmasters/v3/sites/{site}/sitemaps"
+INSPECT_API = "https://searchconsole.googleapis.com/v1/urlInspection/index:inspect"
 
 PLACEHOLDER_HOSTS = ("example.com", "example.org", "localhost", "127.0.0.1", "0.0.0.0")
 
@@ -136,9 +147,42 @@ def access_token(info: dict) -> str:
 # Preconditions
 # ---------------------------------------------------------------------------
 
-def site_property(base_url: str) -> str:
-    """Search Console accepts either a URL-prefix property or a domain property."""
-    return base_url if base_url.endswith("/") else base_url + "/"
+def site_property(site: dict) -> str:
+    """Return the Search Console property identifier.
+
+    Configured once in data/site.json (`gsc_property`). Both forms are valid:
+      - "sc-domain:dragdrivecodes.space"  (domain property, DNS-verified)
+      - "https://dragdrivecodes.space/"   (URL-prefix property)
+
+    To switch forms, edit only `gsc_property` in data/site.json.
+    """
+    configured = str(site.get("gsc_property") or "").strip()
+    if configured:
+        return configured
+    # Legacy fallback when the key is absent: URL-prefix form.
+    base = site["base_url"].rstrip("/")
+    return base + "/"
+
+
+def property_problems(prop: str, base_url: str) -> list[str]:
+    """Catch the mistake that produces a confusing 403/404 later."""
+    host = urllib.parse.urlparse(base_url).hostname or ""
+    if prop.startswith("sc-domain:"):
+        domain = prop[len("sc-domain:"):].strip("/")
+        if domain != host:
+            return [f"gsc_property '{prop}' does not match base_url host '{host}'"]
+        return []
+    if not prop.startswith(("http://", "https://")):
+        return [f"gsc_property '{prop}' must be 'sc-domain:<host>' or an http(s) URL"]
+    if not prop.endswith("/"):
+        return [f"gsc_property '{prop}' must end with '/' for a URL-prefix property"]
+    if urllib.parse.urlparse(prop).hostname != host:
+        return [f"gsc_property '{prop}' does not match base_url host '{host}'"]
+    return []
+
+
+def property_kind(prop: str) -> str:
+    return "domain property" if prop.startswith("sc-domain:") else "URL-prefix property"
 
 
 def sitemap_url(base_url: str) -> str:
@@ -199,6 +243,14 @@ def run_check(site: dict) -> int:
     else:
         ok(f"base_url: {base}")
 
+    prop = site_property(site)
+    prop_issues = property_problems(prop, base)
+    if prop_issues:
+        blocked += prop_issues
+    else:
+        ok(f"Search Console property: {prop} ({property_kind(prop)})")
+    ok(f"sitemap feed: {sitemap_url(base)}")
+
     blocked += check_local_build(base)
 
     info, source = find_credentials()
@@ -219,8 +271,8 @@ def run_check(site: dict) -> int:
 
     print("\nWhat still has to happen outside this script")
     print("  1. The domain has to be registered, deployed and serving this dist/ folder over HTTPS.")
-    print("  2. The site has to be added as a Search Console property and verified")
-    print("     (DNS TXT record or HTML file — the HTML meta tag route needs a template change).")
+    print("  2. The property above has to exist in Search Console and be verified.")
+    print("     This script cannot confirm that without credentials; domain properties use DNS TXT.")
     print("  3. The service-account email has to be added as a user of that property in Search Console.")
     print("  4. The Search Console API has to be enabled in the Google Cloud project that owns the key.")
 
@@ -239,14 +291,20 @@ def run_check(site: dict) -> int:
 
 def submit(site: dict, dry_run: bool) -> int:
     base = site["base_url"].rstrip("/")
-    property_url = site_property(base)
+    property_url = site_property(site)
     feed = sitemap_url(base)
+    issues = property_problems(property_url, base)
+    if issues:
+        print("Invalid Search Console property configuration:")
+        for issue in issues:
+            print(f"  - {issue}")
+        return 1
     endpoint = API.format(site=urllib.parse.quote(property_url, safe=""),
                           feed=urllib.parse.quote(feed, safe=""))
 
     print("Request")
     print(f"  PUT {endpoint}")
-    print(f"  property: {property_url}")
+    print(f"  property: {property_url} ({property_kind(property_url)})")
     print(f"  sitemap:  {feed}")
 
     info, source = find_credentials()
@@ -281,9 +339,140 @@ def submit(site: dict, dry_run: bool) -> int:
         return 1
 
 
+# ---------------------------------------------------------------------------
+# Read-only queries
+# ---------------------------------------------------------------------------
+
+def api_json(url: str, token: str, method: str = "GET",
+             body: dict | None = None) -> tuple[int, dict | None]:
+    """Return (status, parsed JSON). Prints the raw error body on failure."""
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    headers = {"Authorization": f"Bearer {token}"}
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, data=data, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            raw = response.read().decode("utf-8", "replace") or "{}"
+            return response.status, json.loads(raw)
+    except urllib.error.HTTPError as e:
+        raw = e.read().decode("utf-8", "replace")
+        print(f"  HTTP {e.code} {url}")
+        print(f"  {raw[:700]}")
+        return e.code, None
+    except Exception as e:  # noqa: BLE001 — network failures are reported, not retried
+        print(f"  request failed: {type(e).__name__}: {e}")
+        return 0, None
+
+
+def require_token(site: dict) -> tuple[str | None, str | None]:
+    prop = site_property(site)
+    issues = property_problems(prop, site["base_url"].rstrip("/"))
+    if issues:
+        print("Invalid Search Console property configuration:")
+        for issue in issues:
+            print(f"  - {issue}")
+        return None, None
+    info, source = find_credentials()
+    if info is None:
+        print("NOT VERIFIED: no credentials.")
+        return None, None
+    print(f"  property: {prop} ({property_kind(prop)})")
+    print(f"  credentials: {source}")
+    return access_token(info), prop
+
+
+def sitemap_status(site: dict) -> int:
+    """GET the sitemaps list: counts, errors, last read time."""
+    print("Sitemaps (read-only)")
+    token, prop = require_token(site)
+    if token is None:
+        return 1
+    url = SITEMAPS_API.format(site=urllib.parse.quote(prop, safe=""))
+    code, payload = api_json(url, token)
+    if code != 200 or payload is None:
+        return 1
+    entries = payload.get("sitemap", [])
+    if not entries:
+        print("  (no sitemaps submitted for this property)")
+        return 0
+    for sm in entries:
+        print(f"\n  {sm.get('path')}")
+        print(f"    lastSubmitted:  {sm.get('lastSubmitted', 'n/a')}")
+        print(f"    lastDownloaded: {sm.get('lastDownloaded', 'n/a')}")
+        print(f"    pending: {sm.get('isPending')}   sitemapIndex: {sm.get('isSitemapsIndex')}")
+        print(f"    errors: {sm.get('errors', '0')}   warnings: {sm.get('warnings', '0')}")
+        for content in sm.get("contents", []):
+            print(f"    {content.get('type')}: submitted={content.get('submitted')} "
+                  f"indexed={content.get('indexed')}")
+    print("\n  note: the API has no 'Discovered URLs' field; 'submitted' is the URL count")
+    print("  inside the sitemap, 'indexed' is what Google reports as indexed.")
+    return 0
+
+
+def sitemap_urls() -> list[str]:
+    sm = SITE_ROOT / "dist" / "sitemap.xml"
+    if not sm.exists():
+        return []
+    text = sm.read_text(encoding="utf-8")
+    return [line.strip().removeprefix("<loc>").removesuffix("</loc>")
+            for line in text.splitlines() if "<loc>" in line]
+
+
+def classify(result: dict) -> str:
+    verdict = result.get("verdict", "")
+    coverage = result.get("coverageState", "") or ""
+    if verdict in {"PASS", "PARTIAL"}:
+        return "已收录"
+    if "excluded" in coverage.lower():
+        return "已排除"
+    return "未收录"
+
+
+def inspect_urls(site: dict) -> int:
+    """URL Inspection for every URL in dist/sitemap.xml, strictly serial."""
+    urls = sitemap_urls()
+    if not urls:
+        print("dist/sitemap.xml missing or empty — run: python build.py")
+        return 1
+    print(f"URL Inspection (read-only, {len(urls)} URLs, serial)")
+    token, prop = require_token(site)
+    if token is None:
+        return 1
+    rows = []
+    for index, url in enumerate(urls, 1):
+        code, payload = api_json(
+            INSPECT_API, token, method="POST",
+            body={"inspectionUrl": url, "siteUrl": prop, "languageCode": "en-US"},
+        )
+        if code != 200 or payload is None:
+            print(f"  stopped at {index}/{len(urls)}: {url}")
+            return 1
+        result = payload.get("inspectionResult", {}).get("indexStatusResult", {})
+        rows.append((url, classify(result), result))
+        time.sleep(0.5)
+
+    for url, category, result in rows:
+        print(f"\n  [{category}] {url}")
+        print(f"    verdict={result.get('verdict', 'n/a')}  "
+              f"coverage={result.get('coverageState', 'n/a')}")
+        print(f"    fetch={result.get('pageFetchState', 'n/a')}  "
+              f"robots={result.get('robotsTxtState', 'n/a')}  "
+              f"lastCrawl={result.get('lastCrawlTime', 'n/a')}")
+        google_c = result.get("googleCanonical", "")
+        user_c = result.get("userCanonical", "")
+        if google_c and user_c and google_c != user_c:
+            print(f"    canonical mismatch: google={google_c} user={user_c}")
+
+    print("\nSummary")
+    for category in ("已收录", "未收录", "已排除"):
+        print(f"  {category}: {sum(1 for r in rows if r[1] == category)}")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     args = set(argv[1:])
-    unknown = args - {"--check", "--dry-run", "-h", "--help"}
+    unknown = args - {"--check", "--dry-run", "--status", "--inspect", "-h", "--help"}
     if unknown:
         print(f"unknown argument(s): {', '.join(sorted(unknown))}")
         return 2
@@ -294,6 +483,10 @@ def main(argv: list[str]) -> int:
     site = load_site()
     if "--check" in args:
         return run_check(site)
+    if "--status" in args:
+        return sitemap_status(site)
+    if "--inspect" in args:
+        return inspect_urls(site)
     return submit(site, dry_run="--dry-run" in args)
 
 

@@ -5,7 +5,7 @@
 - 上游流程依据：`02-product/码源获取与更新机制.md`（码源清单、三级核验、节奏）
 - 本文不含真实凭证、不连接任何主机；所有命令都会标明 **【服务器】** 或 **【本地】**
 
-> **脚本状态（2026-11-15 更新）**：巡检脚本已实现并自测通过，路径 `04-site/scripts/patrol.py`（仅标准库，无需 pip）。本文 §4.4 的骨架保留作为设计说明，实际参数以脚本 `--help` 为准：`--dry-run`、`--snapshot-file`、`--base-dir`、`--codes-file`、`--universe`、`--keep`、`--alert`、`--no-notify`、`--json`、`--exit-zero`。退出码：0 正常、10 有候选待确认、30 拉取失败、40 静默超 36h。
+> **脚本状态（2026-11-16 核对）**：巡检脚本已实现并自测通过，路径 `04-site/scripts/patrol.py`（仅标准库，无需 pip）。本文 §4.4 的骨架已删除，实际参数以脚本 `--help` 为准：`--once`、`--dry-run`、`--snapshot-file`、`--base-dir`、`--codes-file`、`--universe`、`--keep`、`--alert`、`--no-notify`、`--exit-zero`、`--json`。退出码只有三个：**0 正常、10 有候选待确认、30 拉取/解析失败**。文档旧版写的「40 静默超 36h」在脚本里**不存在**：静默 >36h 只在成功运行里追加一条提醒并推 webhook，退出码不变。目录不可写属于未捕获异常，会以 Python 的 1 退出并打印 traceback，不是 40。
 
 ---
 
@@ -54,12 +54,17 @@ sudo install -d -m 0750 -o ddc  -g ddc  /var/lib/ddc-patrol
 sudo install -d -m 0750 -o ddc  -g ddc  /var/lib/ddc-patrol/snapshots
 sudo install -d -m 0750 -o ddc  -g ddc  /var/lib/ddc-patrol/reports
 sudo install -d -m 0750 -o root -g ddc  /etc/ddc-patrol
+
+# 把本地 data/codes.json 上传到 /tmp 后执行（见 §8），权限必须是 root:ddc 0640
+sudo install -m 0640 -o root -g ddc /tmp/codes.json /etc/ddc-patrol/codes.json
 ```
 
 | 路径 | 内容 | 权限 / 属主 | 为什么不放进仓库 |
 |---|---|---|---|
 | `/opt/ddc-patrol/patrol.py` | 脚本本体 | `0755 root:root` | 代码可以进仓库，但部署副本由你手动放，避免"服务器上跑的版本和仓库里不一致却没人发现" |
-| `/etc/ddc-patrol/patrol.env` | webhook URL、可选 User-Agent 标识 | **`0640 root:ddc`** | 这是密钥。unit 文件通常是 644 全局可读，**绝不能**把 URL 写进 unit |
+| `/opt/ddc-patrol/run-patrol.sh` | wrapper（固定 PATH / umask / `--codes-file`） | `0755 root:root` | unit 与 cron 共用同一套参数，排障时也跑同一条命令 |
+| `/etc/ddc-patrol/patrol.env` | 只放 `DDC_WEBHOOK_URL` | **`0640 root:ddc`** | 这是密钥。unit 文件通常是 644 全局可读，**绝不能**把 URL 写进 unit |
+| `/etc/ddc-patrol/codes.json` | 码表只读副本，用于集合差 | **`0640 root:ddc`** | 服务器不存站点源码；每次改完码表手动同步一份 |
 | `/var/lib/ddc-patrol/snapshots/` | 每日原始 JSON | `0750 ddc:ddc` | 快照属于运行数据，不该 commit |
 | `/var/lib/ddc-patrol/reports/` | 每日人读清单（md） | `0750 ddc:ddc` | 同上 |
 | `/var/lib/ddc-patrol/state.json` | `last_success`、上次快照 sha | `0640 ddc:ddc` | 用于"连续失败/静默"判断 |
@@ -78,7 +83,7 @@ sudo install -d -m 0750 -o root -g ddc  /etc/ddc-patrol
 | 失败告警 | `OnFailure=` 直接挂一个告警 unit | 只能靠 `MAILTO` 或包装脚本 |
 | 环境变量 | `EnvironmentFile=` 精确控制 | crontab 里写明文（谁都能 `crontab -l`） |
 
-**结论：用 systemd timer。** 只有当你的镜像没有 systemd（极少见）时才退回 cron，写法见 §3.3。
+**结论：用 systemd timer。** 只有当你的镜像没有 systemd（极少见）时才退回 cron，写法见 §3.4。
 
 ### 3.1 先把时区钉死
 
@@ -102,6 +107,35 @@ timedatectl | grep "Time zone"
 
 ### 3.3 单元文件（完整可用）
 
+**先建 wrapper**：unit 里只调用 wrapper，参数集中在 wrapper 一处，手工排障时直接跑同一条命令。
+
+**【服务器】** 新建 `/opt/ddc-patrol/run-patrol.sh`
+
+```sh
+#!/bin/sh
+set -eu
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PYTHONUNBUFFERED=1
+umask 027
+
+# 固定参数：单次运行、不因「有候选码」让 systemd 记 failed、用只读码表做集合差。
+# 额外参数（如 --dry-run）会追加在后面，便于手工排障。
+exec /usr/bin/python3 /opt/ddc-patrol/patrol.py \
+  --once \
+  --exit-zero \
+  --codes-file /etc/ddc-patrol/codes.json \
+  "$@"
+```
+
+**【服务器】**
+
+```bash
+sudo chown root:root /opt/ddc-patrol/run-patrol.sh
+sudo chmod 0755 /opt/ddc-patrol/run-patrol.sh
+```
+
+> 注意 `--codes-file`：脚本默认按 `脚本目录/../data/codes.json` 找码表，服务器上没有这个路径。少了这个参数，`load_known()` 会打印 `codes file not found`，把官方描述里的所有候选都当成新码。
+
 **【服务器】** 新建 `/etc/systemd/system/ddc-patrol.service`
 
 ```ini
@@ -117,9 +151,10 @@ User=ddc
 Group=ddc
 WorkingDirectory=/var/lib/ddc-patrol
 EnvironmentFile=/etc/ddc-patrol/patrol.env
-ExecStart=/usr/bin/python3 /opt/ddc-patrol/patrol.py --exit-zero
+ExecStart=/opt/ddc-patrol/run-patrol.sh
 TimeoutStartSec=180
 RuntimeMaxSec=300
+UMask=0027
 # 只允许写这两个目录，其余文件系统只读
 ProtectSystem=strict
 ReadWritePaths=/var/lib/ddc-patrol
@@ -165,10 +200,11 @@ ExecStart=/usr/bin/python3 /opt/ddc-patrol/patrol.py --alert "%i failed"
 
 ```cron
 # 机器时区必须是 UTC（timedatectl 确认过）。00:10 UTC = 09:10 JST
-10 0 * * * /usr/bin/python3 /opt/ddc-patrol/patrol.py --once >> /var/lib/ddc-patrol/reports/cron.log 2>&1
+# cron 不读 systemd 的 EnvironmentFile，必须自己 source；wrapper 负责 PATH 与 --codes-file
+10 0 * * * set -a; . /etc/ddc-patrol/patrol.env; set +a; /opt/ddc-patrol/run-patrol.sh >> /var/lib/ddc-patrol/reports/cron.log 2>&1
 ```
 
-cron 的坑：漏跑不补、日志要自己转、环境变量为空（`PATH` 很短，所以这里用绝对路径 `/usr/bin/python3`）、失败没有告警。
+cron 的坑：漏跑不补、日志要自己转、环境变量为空（所以 wrapper 里显式设了 `PATH`）、失败没有告警（需要额外加 `|| /opt/ddc-patrol/run-patrol.sh --alert "cron failed"`）。
 
 ---
 
@@ -176,135 +212,88 @@ cron 的坑：漏跑不补、日志要自己转、环境变量为空（`PATH` �
 
 ### 4.1 输入（只用公开接口，不需要任何账号）
 
-| 源 | 请求 | 取什么 |
-|---|---|---|
-| A2 · Roblox 公开 Games API | `GET https://games.roblox.com/v1/games?universeIds=7089588429` | `description`（官方码通常写在这里）、`updated`（**判断新旧必须看这个，不能只看 description**）、`name`、`playing`、`visits`、`favoritedCount` |
-| A1 · 官方游戏页（可选二路） | `GET https://www.roblox.com/games/131378148336503/` | 若 HTML 里能解析到描述就以它为准；解析为空只记警告，不算失败（该页可能由 JS 渲染） |
+| 源 | 请求 | 取什么 | 实现状态 |
+|---|---|---|---|
+| A2 · Roblox 公开 Games API | `GET https://games.roblox.com/v1/games?universeIds=7089588429` | `description`（官方码通常写在这里）、`updated`（**判断新旧必须看这个，不能只看 description**）、`name`、`playing`、`visits` | 已实现 |
+| A1 · 官方游戏页（可选二路） | `GET https://www.roblox.com/games/131378148336503/` | 若 HTML 里能解析到描述就以它为准 | **未实现**：脚本不抓 HTML，正文由 JS 渲染、解析不稳定，当前只用 A2 |
 
 官方没有公布这个接口的配额；**每天 1 次属于极低频率**，不需要 key。
 
 ### 4.2 处理流程
 
 ```
-1. 抓 A2（3 次重试，退避 2s/4s/8s），整段响应落盘：
-   snapshots/2026-11-15T0010Z.json        ← 原始响应，不加工，留证据
-2. 若 A1 有内容：snapshots/2026-11-15T0010Z.page.html
-3. 与 latest 指针指向的上一个快照做 diff：
-   - updated 变了吗（真正的"官方动过"信号）
-   - description 的逐行 diff（difflib.unified_diff）
-4. 正则抽候选码：[A-Z][A-Z0-9]{5,24}，去掉 BETA/THE/UPDATE/ROBLOX 之类常见词，
-   再用 data/codes.json 的 active + expired 做集合差
-5. 疑似失效：active 里的码这次没出现在 description 里
-   ⚠️ 只标"需人工确认"，绝不自动改状态 —— 官方常常只挂当月码，消失不等于过期
-6. 写报告 reports/2026-11-15.md + 更新 state.json
-7. 推送一条摘要（webhook），全文留在报告文件里
+1. 抓 A2（最多 3 次，退避 2s/4s/8s，单次超时 25s），原始响应整段落盘：
+   snapshots/2026-11-16T0010Z.json        ← 不加工，留证据
+2. 取 data[0]；data 为空抛 ValueError → 退出码 30（换 universeId 或接口改结构都会走到这里）
+3. 读 latest.json 作为上一版，比对 updated 与 description：
+   - 首次运行（无 latest）→ 只建基线，疑似新码/失效都强制为 0，不告警
+   - 有上一版但 description 完全相同（只有 updated 变了）→ 也报 0，避免每天重复刷同一条
+4. 抽候选码：CODE_RE = [A-Z][A-Z0-9]{9,}(?:\.[0-9]+)*（允许 V1.2.0 这种带点版本号），
+   再去掉 DENY 集合（DRAGDRIVESIMULATOR / BETAUPDATE 等），
+   最后与 codes.json 的 active + unconfirmed + expired 做集合差
+5. 疑似失效：description 变了以后，active 里的码这次没出现 → 标记，不自动改状态
+6. 写 snapshots/yyyymmddThhmmZ.json + latest.json + reports/yyyy-mm-dd.md + state.json，
+   并按 --keep（默认 90 天）清理旧快照
+7. webhook 推一条摘要；成功运行时额外检查 state.json 的 last_success，超过 36h 追加静默提醒
 ```
+
+> 为什么「description 没变就什么都不报」：官方经常只改缩略图或标题，`updated` 会动但描述不动。这种日子把同一批候选码再推一遍只会让人忽略告警。代价是**首次运行和描述未变的日子看不到 active 码是否还在描述里**，这是刻意取舍，不是漏算。
 
 ### 4.3 输出契约（人工照着做的那种清单）
 
-`reports/2026-11-15.md` 必须长这样，缺字段就算脚本没写完：
+`reports/2026-11-16.md` 的实际结构（由 `build_report()` 生成）：
 
-```markdown
-# Patrol 2026-11-15 00:10 UTC
+````markdown
+# Patrol 2026-11-16 00:10 UTC
 
-- 结果：有变化 / 无变化 / 拉取失败
-- updated：2026-11-14T18:22:10.123Z → 2026-11-15T19:01:44.512Z
-- description sha256：a1b2… → f9e8…
+- 体验：(TOWING x LIMITED UPDATE 🎃) Drag Drive Simulator
+- updated：2026-11-15T21:11:25.64Z
+- description sha256：71b3919eaa9e…
+- 判定：有变化 / 仅时间戳变化 / 基线
 
-## 疑似新码（需人工确认，共 1 条）
-- `DRAGDRIVESIMULATORNOVEMBER26` — 出现在 description 第 3 行，未在 codes.json 中
+## 变化摘要
+- updated 变化：2026-11-14T… → 2026-11-15T…
+- description 文本变化：有
+
+## 基线候选（首次运行，仅供参考，未触发告警）
+- `DRAGDRIVESIMULATORV1.2.0`
+
+## 疑似新码（需人工确认，共 0 条）
+（无）
 
 ## 疑似失效（需人工确认，共 0 条）
 （无）
 
-## 描述行 diff
+## 描述 diff
 ```diff
-+ 🎁 New code: DRAGDRIVESIMULATORNOVEMBER26
-- 🎁 New code: DRAGDRIVESIMULATORSEPTEMBER26
+--- previous
++++ current
+@@ …
 ```
 
 ## 原文快照
-snapshots/2026-11-15T0010Z.json
-```
+snapshots/2026-11-16T0010Z.json
+
+> 本报告只做提示，不修改 codes.json，也不触发任何构建。确认后请手动改 `data/codes.json` → `python build.py` → 部署。
+````
+
+「基线候选」只在首次运行出现，不算告警；从第二次运行起只看「疑似新码 / 疑似失效」两节。
 
 ### 4.4 退出码（给 systemd 和监控用）
 
 | 退出码 | 含义 |
 |---|---|
-| `0` | 拉取成功、无任何变化 |
+| `0` | 拉取成功；无候选码，或本次没有可比的变化 |
 | `10` | 拉取成功、有疑似新码或疑似失效 → 需要人看一眼 |
-| `30` | 拉取失败（网络/HTTP 非 200/JSON 解析失败），3 次重试都失败 |
-| `40` | 配置错误（env 缺失、目录不可写） |
+| `30` | 拉取/解析失败（网络、HTTP 非 200、`data[]` 为空、JSON 非法），3 次重试都失败 |
 
-> systemd 里 `10` 也会被记成 `failed`（oneshot 非 0 即失败）。两个办法：脚本对 `10` 用 `exit 10` 但 unit 加 `SuccessExitStatus=10`，或者统一 `exit 0` 只靠报告和 webhook 区分。**推荐后者**（`SuccessExitStatus=10` 在部分 systemd 版本上对 oneshot 行为不一致，不值得赌）。
+> 没有 40。配置/权限错误（目录不可写、env 文件缺失）是未捕获异常，Python 以 1 退出并打印 traceback。
+>
+> systemd 里 `10` 会被记成 `failed`（oneshot 非 0 即失败）。wrapper 统一加了 `--exit-zero`，让它只靠报告和 webhook 区分，unit 不需要 `SuccessExitStatus=`。
 
-### 4.5 参考骨架（**未入库、未运行**，落地时再正式写）
+### 4.5 历史骨架（已删除）
 
-```python
-#!/usr/bin/env python3
-"""Minimal patrol skeleton: fetch -> snapshot -> diff -> candidates -> report -> notify.
-Stdlib only. See 05-launch/ECS每日巡检部署方案.md for the full spec."""
-import json, os, re, sys, time, hashlib, urllib.request
-from datetime import datetime, timezone
-from pathlib import Path
-
-UNIVERSE = 7089588429
-API = f"https://games.roblox.com/v1/games?universeIds={UNIVERSE}"
-DATA = Path("/var/lib/ddc-patrol")
-SNAP, REP = DATA / "snapshots", DATA / "reports"
-CAND = re.compile(r"\b[A-Z][A-Z0-9]{5,24}\b")
-NOISE = {"BETA", "UPDATE", "ROBLOX", "CODES", "REDEEM", "SHOP", "LIKES", "STYLE"}
-
-
-def fetch(url, tries=3):
-    for i in range(tries):
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "DragDriveCodes-patrol/1.0"})
-            with urllib.request.urlopen(req, timeout=20) as r:
-                return r.read().decode("utf-8")
-        except Exception as e:
-            if i == tries - 1:
-                raise
-            time.sleep(2 ** (i + 1))
-
-
-def main():
-    now = datetime.now(timezone.utc)
-    stamp = now.strftime("%Y-%m-%dT%H%MZ")
-    try:
-        raw = fetch(API)
-    except Exception as e:
-        print(f"fetch failed: {e}", file=sys.stderr)
-        return 30
-    payload = json.loads(raw)
-    g = payload["data"][0]
-    desc, updated = g.get("description", ""), g.get("updated", "")
-
-    (SNAP / f"{stamp}.json").write_text(raw, encoding="utf-8")
-    latest = SNAP / "latest.json"
-    prev = json.loads(latest.read_text(encoding="utf-8")) if latest.exists() else None
-    latest.write_text(raw, encoding="utf-8")
-
-    prev_desc = (prev or {}).get("data", [{}])[0].get("description", "")
-    found = {c for c in CAND.findall(desc)} - NOISE
-    lines = [f"# Patrol {now:%Y-%m-%d %H:%M} UTC", "",
-             f"- updated: {(prev or {}).get('data', [{}])[0].get('updated', 'n/a')} -> {updated}",
-             f"- description sha256: {hashlib.sha256(desc.encode()).hexdigest()[:12]}", ""]
-    if found:
-        lines += ["## 疑似新码（需人工确认）", *[f"- `{c}`" for c in sorted(found)], ""]
-    else:
-        lines += ["## 疑似新码（需人工确认）", "（无）", ""]
-    lines += ["## 描述是否变化", "有" if desc != prev_desc else "无", ""]
-    (REP / f"{now:%Y-%m-%d}.md").write_text("\n".join(lines), encoding="utf-8")
-    print("\n".join(lines[:6]))
-    return 10 if found else 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
-```
-
-这版骨架**没做的部分**（正式实现必须补）：`--alert` 参数与 webhook 推送、`state.json` 的 `last_success` 与静默告警、`--dry-run`、快照保留 90 天、A1 二路抓取、与 `data/codes.json` 的集合差（服务器上没有这个文件，要靠 `--codes-file` 上传一份只读副本）。
+旧版这里的 60 行「参考骨架」已移除：它与 `scripts/patrol.py` 的实际行为（正则、退出码、`--codes-file`、基线逻辑、静默告警）不一致，留着只会被误抄。部署时只用仓库里的 `04-site/scripts/patrol.py`。
 
 ---
 
@@ -343,13 +332,16 @@ curl -s -X POST "$DDC_WEBHOOK_URL" \
 ```bash
 sudo tee /etc/ddc-patrol/patrol.env >/dev/null <<'EOF'
 DDC_WEBHOOK_URL=https://example.invalid/REPLACE_ME
-DDC_NOTIFY=1
 EOF
 sudo chown root:ddc /etc/ddc-patrol/patrol.env
 sudo chmod 0640 /etc/ddc-patrol/patrol.env
 ```
 
 > 上面是**占位值**，`example.invalid` 是保留域名，保证你忘了改也不会真发出去。
+>
+> **变量名是 `DDC_WEBHOOK_URL`**（D-D-C，DragDriveCodes 的首字母），不是 `DDD_`。脚本只读这一个名字，写成 `DDD_WEBHOOK_URL` 不会报错，只会打印 `notify: skipped (DDC_WEBHOOK_URL not set)`，等于静默漏掉所有告警。
+>
+> 旧版这里还有一个 `DDC_NOTIFY=1`，脚本从未读取，已删除。
 
 ---
 
@@ -362,7 +354,8 @@ sudo chmod 0640 /etc/ddc-patrol/patrol.env
 3. **连续/静默失败**（最容易漏的）：因为 `Persistent=true` 只补跑一次，如果拉取连续 3 天都 403/超时，你只会看到 3 条告警，第 4 天开始可能就不看了。所以脚本每次**成功**时也要检查 `state.json` 里的 `last_success`：
 
    - 距今 > 36 小时 → 在成功消息里追加一行「⚠️ 上次成功是 X 天前」；
-   - 建议再加一条独立的心跳：每周日 00:20 UTC 由 timer 触发 `--heartbeat`，哪怕没变化也发一句「本周巡检正常，最后一次成功 …」。**沉默 = 出事**比"每天都有消息"更可靠。
+   - 注意这条提醒只有**成功运行时**才会发。如果任务本身每天都失败，靠的是第 2 层的 `OnFailure`，而不是这条。
+   - `--heartbeat` **未实现**（脚本没有这个参数）。若确实需要「每周日无论有没有变化都发一句」，用现成的 `--alert` 加一个独立 timer 即可，不需要改脚本：`ExecStart=/opt/ddc-patrol/run-patrol.sh --alert "weekly heartbeat"`。
 
 查看状态：
 
@@ -384,15 +377,15 @@ journalctl -u ddc-patrol.service --since "7 days ago" | grep -c "fetch failed"
 | # | 命令 | 应该看到 |
 |---|---|---|
 | 1 | `sudo -u ddc python3 -m py_compile /opt/ddc-patrol/patrol.py` | 无输出 = 语法通过 |
-| 2 | `sudo -u ddc python3 /opt/ddc-patrol/patrol.py --dry-run` | 打印本次快照摘要，**不写** `state.json`；`snapshots/` 里不新增文件 |
-| 3 | `sudo -u ddc python3 /opt/ddc-patrol/patrol.py --once` | 退出码 0 或 10；`reports/2026-11-15.md` 生成；`snapshots/` 有新 json |
+| 2 | `sudo -u ddc /opt/ddc-patrol/run-patrol.sh --dry-run` | 打印本次快照摘要，**不写** `state.json`；`snapshots/` 里不新增文件 |
+| 3 | `sudo -u ddc /opt/ddc-patrol/run-patrol.sh` | 退出码 0（wrapper 带 `--exit-zero`）；`reports/<今天>.md` 生成；`snapshots/` 有新 json |
 | 4 | `ls -l /var/lib/ddc-patrol/reports/` | 文件属主是 `ddc`，权限 640 |
 | 5 | `sudo systemctl daemon-reload && sudo systemctl start ddc-patrol.service` | `systemctl status` 显示 `inactive (dead)` 且 `Result=success`（oneshot 正常结束就是 dead） |
-| 6 | `journalctl -u ddc-patrol.service -n 20` | 有你脚本打印的摘要，没有 traceback |
+| 6 | `journalctl -u ddc-patrol.service -n 20` | 有你脚本打印的摘要，没有 traceback；且不应出现 `codes file not found` |
 | 7 | `sudo systemctl enable --now ddc-patrol.timer` | `Created symlink … timers.target.wants/` |
 | 8 | `systemctl list-timers ddc-patrol.timer` | `NEXT` 列是**明天 00:10 UTC**（换算成你本地时间是次日 08:10 北京时间） |
 | 9 | `systemctl show ddc-patrol.timer -p NextElapseUSecRealtime` | 一个具体时间戳，用 `date -u -d @<秒>` 核对是否 00:10 UTC |
-| 10 | 故障演练：`sudo -u ddc DDC_FORCE_FAIL=1 python3 /opt/ddc-patrol/patrol.py --once` | 退出码 30；webhook 收到一条失败消息；`state.json` 的 `last_success` **没变** |
+| 10 | 故障演练：`sudo -u ddc /opt/ddc-patrol/run-patrol.sh --snapshot-file /nonexistent.json` | 退出码 30（`--exit-zero` 不影响失败路径）；webhook 收到一条失败消息；`state.json` 的 `last_success` **没变** |
 | 11 | `sudo systemctl stop ddc-patrol.timer`（演练结束）→ 再 `start` | 恢复 |
 
 第 8、9 步就是防"时区跑偏"的验收点：**如果 `NEXT` 显示的不是你想要的时刻，先回去改 §3.3 的 `OnCalendar`，不要改机器时区来回试。**
@@ -423,9 +416,12 @@ journalctl -u ddc-patrol.service --since "7 days ago" | grep -c "fetch failed"
 
 ## 9. 需要你确认/提供的东西（我这边都没有）
 
-1. 服务器登录方式（本方案未连接过任何主机，也不知道 IP）。
-2. `timedatectl` 的实际输出（决定 §3 用哪套时间表达式）。
-3. 是否已有 systemd（极老的 Alibaba Cloud Linux 2 镜像才有例外）。
-4. 通知渠道选哪个：Discord / 飞书 / 只要文件。
-5. 是否允许服务器出网到 `games.roblox.com`（若被安全组或代理限制，需要放行或配代理）。
-6. 巡检脚本要不要我现在就按 §4 写成正式版本（含 `--dry-run` / `--alert` / 静默告警）。
+1. **公网 IP**（或内网跳板路径）与 **SSH 端口**。
+2. **SSH 登录用户**（root 还是 sudo 用户）与**认证方式**：密钥文件路径，或密码（密码不要直接发在聊天里，用临时口令或你自己登录后粘贴命令）。
+3. **`timedatectl` 的实际输出**（决定 §3 用哪套时间表达式；本方案默认 UTC）。
+4. **是否有 systemd**（极老的 Alibaba Cloud Linux 2 镜像才有例外）。输出 `systemctl --version` 即可确认。
+5. **告警渠道**：飞书 / Discord / 只要服务器上的 md。选飞书的话需要一个自定义机器人的 webhook URL（以及是否启用签名校验）。
+6. **是否允许服务器出网到 `games.roblox.com`**（安全组 / 代理限制需要放行）。
+7. **`codes.json` 同步方式**：接受每次改完码表手动 `scp` 一份到 `/etc/ddc-patrol/codes.json`，还是希望脚本只输出候选、由你在本地对照。
+
+以上任一项未确认，我都不会写「已部署」「已配置」。

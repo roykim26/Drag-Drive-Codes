@@ -7,6 +7,7 @@ __pycache__/
 # Credentials. Never commit these, and never copy them into dist/.
 gsc-service-account*.json
 gsc-oauth-token*.json
+ddc-seo-*.json
 .env
 .env.*
 

@@ -152,7 +152,7 @@ python scripts\patrol.py                    # 正常跑（写快照 + 报告，�
 | 目录权限 | `/var/lib/ddc-patrol` → `0750 ddc:ddc`；快照 `snapshots/*.json` 与 `state.json` → `0640 ddc:ddc`；配置 `/etc/ddc-patrol/patrol.env` → `0640 root:ddc` |
 | 文件布局 | `snapshots/YYYY-MM-DDTHHMMZ.json`、`snapshots/latest.json`、`reports/YYYY-MM-DD.md`、`state.json`；`--keep 90` 清理 90 天前快照 |
 | 告警 | webhook 只从环境变量 `DDC_WEBHOOK_URL` 读（**不写死、不入库**）；未设置时打印 `notify: skipped` 并照常落盘。按 host 自动区分 Discord / 飞书 / 通用 JSON |
-| 失败行为 | HTTP 失败重试 3 次（2/4/8s 退避）；全程失败退出码 30，静默 >36h 退出码 40，有候选退出码 10（systemd 里用 `--exit-zero`） |
+| 失败行为 | HTTP 失败重试 3 次（2/4/8s 退避）；全程失败退出码 30，有候选退出码 10；静默 >36h 只在成功运行时追加提醒并推 webhook，退出码不变（没有 40；systemd 里用 `--exit-zero`） |
 | 首次运行 | 只建基线不告警，报告里的候选码标为「基线候选（仅供参考）」 |
 
 部署到服务器（systemd timer、时区、验证步骤）见 [05-launch/ECS每日巡检部署方案.md](../05-launch/ECS每日巡检部署方案.md)。
@@ -205,6 +205,8 @@ python scripts\patrol.py                    # 正常跑（写快照 + 报告，�
 ```powershell
 python scripts\gsc_submit.py --check     # 只查前置条件，不发请求
 python scripts\gsc_submit.py --dry-run   # 打印将要发送的 PUT，不发
+python scripts\gsc_submit.py --status    # 只读：sitemap 列表、错误数、最后读取时间
+python scripts\gsc_submit.py --inspect   # 只读：逐条 URL Inspection（串行，17 条）
 python scripts\gsc_submit.py             # 真的提交（需要凭证 + 已上线）
 ```
 
@@ -214,9 +216,11 @@ python scripts\gsc_submit.py             # 真的提交（需要凭证 + 已上�
 2. 环境变量 `GSC_SERVICE_ACCOUNT_FILE`（文件路径）
 3. 本地文件 `gsc-service-account.json`（已在 `.gitignore`）
 
-需要 `pip install google-auth`。**当前状态：站点已上线，但仍没有 GSC 属性验证、没有服务账号密钥。** `--check` 现在会返回退出码 1 并打印 `NOT VERIFIED`，这是预期行为，不是脚本坏了。脚本的 base URL 从 `data/site.json` 读取，没有硬编码域名。
+需要 `pip install google-auth`。**当前状态：站点已上线；属性是网域资源 `sc-domain:dragdrivecodes.space`（DNS TXT 已验证），但本机还没有服务账号密钥。** `--check` 现在会返回退出码 1 并打印 `NOT VERIFIED`，这是预期行为，不是脚本坏了。
 
-域名上线后需要人工完成：建属性并验证 → 建服务账号并启用 Search Console API → 把服务账号邮箱加为该属性的用户 → 把密钥交给上面三种方式之一。
+属性的写法只有一处：`data/site.json` 的 `gsc_property`。当前值是 `sc-domain:dragdrivecodes.space`；要切回 URL 前缀属性，把这一行改成 `https://dragdrivecodes.space/` 即可，其余代码不用动。sitemap 的 feedpath 始终是完整 URL `https://dragdrivecodes.space/sitemap.xml`，与属性形式无关。`--check` 会校验属性与 `base_url` 的 host 是否一致。
+
+还需要人工完成：建服务账号并启用 Search Console API → 把服务账号邮箱加为该属性的「完全」用户 → 把密钥交给上面三种方式之一。
 
 ## 自测结果（2026-11-16 内容扩充后复测）
 

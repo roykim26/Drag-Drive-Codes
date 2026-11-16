@@ -1,6 +1,6 @@
 # DragDriveCodes — 可部署静态站点
 
-纯前端静态站，无框架、无外部请求。9 个 HTML 页面 + sitemap + robots + ads.txt 占位。
+纯前端静态站，无框架、无外部请求。18 个 HTML 页面（17 个可索引页 + 404）+ sitemap + robots + ads.txt 占位。
 
 站点域名 `https://dragdrivecodes.space`（唯一来源：`data/site.json` 的 `base_url`；代码里没有硬编码域名，换域名只改这一处）。
 
@@ -24,7 +24,26 @@
 └─ preview/            本地实测截图（移动端 375px / 桌面 1280px）
 ```
 
-`dist/` 里最终包含：9 个 HTML、`sitemap.xml`、`robots.txt`、`ads.txt`、`og.png`、`favicon.ico`、`_headers`、`_redirects`。其中 `_headers` / `_redirects` 是 Cloudflare Pages 的约定文件（构建时生成，不要手写进 `dist/`）。`dist-local/` 只有 9 个扁平 HTML + `favicon.ico` + `og.png`，**永远不要上传它**（里面的 canonical 指向生产域名，扁平文件名与 canonical 路径不一致）。
+`dist/` 里最终包含：18 个 HTML、`sitemap.xml`、`robots.txt`、`ads.txt`、`og.png`、`favicon.ico`、`_headers`、`_redirects`。其中 `_headers` / `_redirects` 是 Cloudflare Pages 的约定文件（构建时生成，不要手写进 `dist/`）。`dist-local/` 只有 18 个扁平 HTML + `favicon.ico` + `og.png`，**永远不要上传它**（里面的 canonical 指向生产域名，扁平文件名与 canonical 路径不一致）。
+
+### 页面结构（17 个可索引页）
+
+| 路径 | 搜索意图 |
+|---|---|
+| `/` | drag drive simulator codes（主词，当月有效码） |
+| `/codes/<code>/` ×5 | 精确码查询（`<code> code`、`what does <code> give`） |
+| `/how-to-redeem/` | drag drive simulator how to redeem codes |
+| `/codes-not-working/` | 兑换失败 / invalid code / code not working 排障长尾 |
+| `/expired-codes/` | expired drag drive simulator codes（总览） |
+| `/expired-codes/2026/`、`/expired-codes/2025/` | 按年份批次查过期码 |
+| `/updates/` | drag drive simulator update history |
+| `/updates/v1-1-9/` | BETA V1.1.9 更新日志（单版本页） |
+| `/rp-guide/` | what is RP in drag drive simulator |
+| `/about/` | 站点核验方法与可信度 |
+| `/privacy/`、`/contact/` | 合规与举报入口 |
+| `/404.html` | noindex，不进 sitemap |
+
+码详情页、年份页、排障页、单版本更新页均由 `build.py` 的 `page_code()` / `page_expired_year()` / `page_troubleshooting()` / `page_update_v119()` 生成；新增 active 码会自动多出一个详情页，`validate_pages()` 会检查每个 active 码都有落点、路径与 `dist-local` 扁平文件名一一对应。
 
 ## 构建与本地预览
 
@@ -178,7 +197,7 @@ python scripts\patrol.py                    # 正常跑（写快照 + 报告，�
 3. 联系邮箱已就绪：`contact@` 与 `abuse@` 经 Cloudflare Email Routing 转发，只负责收信，回复从个人邮箱发出。
 4. Google Search Console 验证 + 提交 `sitemap.xml`（脚本已备：`python scripts/gsc_submit.py --check`）。
 5. 分析工具（建议 Cloudflare Web Analytics，无 Cookie 免同意条；GA4 需加同意提示）。
-6. AdSense：账号申请、审核通过后把 pub-id 写入 `dist/ads.txt` 并插入广告代码。**当前只有 6 个内容页，审核偏薄，建议扩到 15+ 页再申请。** 受众含未成年人，勿开个性化定向、勿使用儿童定向标记。
+6. AdSense：账号申请、审核通过后把 pub-id 写入 `dist/ads.txt` 并插入广告代码。**当前 17 个可索引页，已过 15 页门槛。** 受众含未成年人，勿开个性化定向、勿使用儿童定向标记。
 7. 广告位已改为**配置驱动**（`data/site.json` 的 `ads`）。默认关闭时不输出任何广告相关字节；接入流程见下一节「广告位（配置驱动）」。
 
 ## GSC 自动提交 sitemap（脚本可用，链路未验证）
@@ -195,31 +214,32 @@ python scripts\gsc_submit.py             # 真的提交（需要凭证 + 已上�
 2. 环境变量 `GSC_SERVICE_ACCOUNT_FILE`（文件路径）
 3. 本地文件 `gsc-service-account.json`（已在 `.gitignore`）
 
-需要 `pip install google-auth`。**当前状态：域名已注册但站点未上线**（`https://dragdrivecodes.space/sitemap.xml` 仍不可达）、没有 GSC 属性验证、没有服务账号密钥。`--check` 现在会返回退出码 1 并打印 `NOT VERIFIED`，这是预期行为，不是脚本坏了。脚本的 base URL 从 `data/site.json` 读取，没有硬编码域名。
+需要 `pip install google-auth`。**当前状态：站点已上线，但仍没有 GSC 属性验证、没有服务账号密钥。** `--check` 现在会返回退出码 1 并打印 `NOT VERIFIED`，这是预期行为，不是脚本坏了。脚本的 base URL 从 `data/site.json` 读取，没有硬编码域名。
 
 域名上线后需要人工完成：建属性并验证 → 建服务账号并启用 Search Console API → 把服务账号邮箱加为该属性的用户 → 把密钥交给上面三种方式之一。
 
-## 自测结果（2026-11-15）
+## 自测结果（2026-11-16 内容扩充后复测）
 
-**构建期断言**：`data validation OK (49 unique codes, 5 active)` → `copy validation OK (number words match 5 active codes)`。7 类坏数据（重复码、日期倒挂、单来源 confirmed、奖励区间倒挂、状态与列表不一致、实测日期非法、正文数量词不一致）均已实测会让构建以退出码 1 失败，且失败时 `dist/` 保留上一版。
+**构建期断言**：`data validation OK (49 unique codes, 5 active)` → `page validation OK (17 pages, 5 code pages)` → `copy validation OK (number words match 5 active codes)`。7 类坏数据（重复码、日期倒挂、单来源 confirmed、奖励区间倒挂、状态与列表不一致、实测日期非法、正文数量词不一致）均已实测会让构建以退出码 1 失败，且失败时 `dist/` 保留上一版。`validate_pages()` 另查 slug/输出路径唯一、除 `/` 外每个页面都有 `dist-local` 扁平名、每个 active 码都有详情页。
 
-**静态检查**（9 页）：title/description/canonical/OG 齐全，description 长度 125–162 字符，每页唯一 H1，JSON-LD 可解析，内部链接无死链，sitemap 8 条 URL 全部可解析，robots 含 Sitemap 指令 — 全部通过。
+**静态检查**（18 个 HTML）：title/description/canonical/OG 齐全，每页唯一 H1，JSON-LD 可解析，全站 543 条内部链接全部 200，sitemap 17 条 URL 与页面一一对应，robots 含 Sitemap 指令。
 
-**浏览器实测**（headless Chrome + CDP，9 页 × 3 视口 = 27 组 + 8 页 × 320/360 窄屏 iframe）：
-- 控制台错误 0、页面异常 0、资源加载失败 0，`failures: []`。
+**浏览器实测**（headless Chrome + CDP，18 页 × 3 视口 = 54 组 + 既有 27 组 + 8 页 × 320/360 窄屏）：
+- 控制台错误 0、页面异常 0、资源加载失败 0（仅故意访问不存在 URL 时出现预期的 404 日志）。
 - 复制按钮：点击后文案变为 `Copied`、背景变绿、`aria-live` 播报完整码值，1.6s 后复位；按钮高度 44px。
-- 举报入口：首页 6 张码卡 → 6 个 `mailto:` 链接，主题预填 `Code report: <CODE>`，移动端高度 44px。
-- 横向溢出：27 组全部 `scrollWidth == innerWidth`；320/360px 实测无溢出元素。
+- 举报入口：`mailto:contact@dragdrivecodes.space`，主题预填 `Code report: <CODE>`，移动端高度 44px。
+- 横向溢出：全部 `scrollWidth == innerWidth`；320/360/375px 实测无溢出元素。
+- 码详情页：首页 5 个 `/codes/` 入口逐个打开均有唯一 H1。
 - 实测徽标：线上 0 个（没有任何 `in_game_verified` 日期，符合事实）。
 - 首屏（375px）在 1 屏内呈现 H1 + 结论 + 统计 + 首个码卡；首屏无广告位。
 
 **性能**：每页 15–29KB，CSS/JS 全内联，零外部字体、零图片请求（OG 图仅供社交分享，favicon 走 `data:` URI，均不参与页面渲染）。
 
-**域名切换核查**（`dragdrivecodes.com` → `dragdrivecodes.space`）：9 页的 canonical / `og:url` / `og:image` / `twitter:image`、sitemap 8 条 `<loc>`、`robots.txt` 的 Sitemap 行、`ads.txt`、JSON-LD `@id`、`mailto:` 全部为新域名；对 `dist/` 全量文本扫描 `dragdrivecodes.com` 命中 **0** 次。
+**域名切换核查**（`dragdrivecodes.com` → `dragdrivecodes.space`）：18 页的 canonical / `og:url` / `og:image` / `twitter:image`、sitemap 17 条 `<loc>`、`robots.txt` 的 Sitemap 行、`ads.txt`、JSON-LD `@id`、`mailto:` 全部为新域名；对 `dist/` 全量文本扫描 `dragdrivecodes.com` 命中 **0** 次。
 
 **品牌标尺寸核验**：内联 SVG 在 120 / 44 / 32px、深（`#0A0D12`）浅（`#F4F6FA`）两种背景、以及 `favicon.ico` 的 16 / 32 / 48px 下均能读出「DD」，无模糊、无裁切。
 
-**本地双击（`file://`）核验**：`dist-local/` 九个页面逐个直接打开、以及从首页点击 8 个导航链接，全部正常渲染（背景 `rgb(10,13,18)`、内联样式表 1 个、无控制台错误、无横向溢出），复制按钮 `Copy code → Copied` 可用，页脚链接全为相对路径。`dist/` 在 `file://` 下**故意不可用**（根绝对路径会解析到 `E:\`），其链接形式与 canonical 保持一致，供线上使用。
+**本地双击（`file://`）核验**：`dist-local/` 十八个页面逐个直接打开、以及从首页点击 8 个导航链接，全部正常渲染（背景 `rgb(10,13,18)`、内联样式表 1 个、无控制台错误、无横向溢出），复制按钮 `Copy code → Copied` 可用，页脚链接全为相对路径。`dist/` 在 `file://` 下**故意不可用**（根绝对路径会解析到 `E:\`），其链接形式与 canonical 保持一致，供线上使用。
 
 ## 技术 SEO 落地清单
 
@@ -232,7 +252,7 @@ python scripts\gsc_submit.py             # 真的提交（需要凭证 + 已上�
 | Open Graph / Twitter Card | 已做（og.png 1200×630） |
 | JSON-LD：Organization、WebSite、WebPage、ItemList、FAQPage、BreadcrumbList | 已做 |
 | 面包屑（视觉 + 结构化数据） | 功能页已做 |
-| 内链（首页 ↔ 4 个功能页 ↔ About） | 已做 |
+| 内链（首页 ↔ 码详情 ↔ 兑换/排障/过期/更新 ↔ About） | 已做 |
 | sitemap.xml（lastmod 取自数据文件） | 已做 |
 | robots.txt + sitemap 引用 | 已做 |
 | 404 页面 + noindex | 已做 |

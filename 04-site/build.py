@@ -60,6 +60,17 @@ ABUSE = SITE.get("abuse_email") or EMAIL
 CHECKED = SITE["last_checked"]
 GAME = SITE["game"]
 
+# One indexable page per active code. The slug is the lowercase code itself, which
+# is what people search for, and it is also what dist-local needs to stay flat.
+CODE_SLUGS = {c["code"]: c["code"].lower() for c in CODES["active"]}
+LOCAL_NAMES.update({f"/codes/{s}/": f"{s}.html" for s in CODE_SLUGS.values()})
+LOCAL_NAMES.update({
+    "/expired-codes/2026/": "expired-codes-2026.html",
+    "/expired-codes/2025/": "expired-codes-2025.html",
+    "/codes-not-working/": "codes-not-working.html",
+    "/updates/v1-1-9/": "updates-v1-1-9.html",
+})
+
 ADS = SITE.get("ads") or {}
 ADS_ON = bool(ADS.get("enabled"))
 ADS_CLIENT = str(ADS.get("client") or "").strip()
@@ -181,6 +192,29 @@ def validate_contacts() -> None:
             print(f"  - {e}")
         raise SystemExit(1)
     print(f"  contacts validation OK ({EMAIL}, {ABUSE})")
+
+
+def validate_pages(pages: list[dict]) -> None:
+    """Every page needs a unique URL, and every URL needs a dist-local name."""
+    errors: list[str] = []
+    slugs = [p["slug"] for p in pages]
+    outs = [p["out"] for p in pages]
+    for label, values in (("slug", slugs), ("output path", outs)):
+        dupes = {v for v in values if values.count(v) > 1}
+        for d in sorted(dupes):
+            errors.append(f"duplicate {label}: {d}")
+    for s in slugs:
+        if s != "/" and s not in LOCAL_NAMES:
+            errors.append(f"{s} has no dist-local file name (add it to LOCAL_NAMES)")
+    missing = [c["code"] for c in ACTIVE if f"/codes/{CODE_SLUGS[c['code']]}/" not in slugs]
+    for code in missing:
+        errors.append(f"active code {code} has no detail page")
+    if errors:
+        print("\nBUILD FAILED — page list is inconsistent:")
+        for e in errors:
+            print(f"  - {e}")
+        raise SystemExit(1)
+    print(f"  page validation OK ({len(pages)} pages, {len(ACTIVE)} code pages)")
 
 
 def validate_data() -> None:
@@ -330,6 +364,7 @@ a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var
 .skip{position:absolute;left:-9999px;top:0;background:var(--accent);color:var(--accent-ink);padding:10px 16px;z-index:99;font-weight:700}
 .skip:focus{left:8px;top:8px}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.code-name{overflow-wrap:anywhere;word-break:break-word}
 .wrap{width:100%;max-width:1080px;margin:0 auto;padding:0 16px}
 @media(min-width:640px){.wrap{padding:0 24px}}
 @media(min-width:1024px){.wrap{padding:0 32px}}
@@ -616,7 +651,7 @@ def footer() -> str:
 """
 
 
-def code_card(c: dict) -> str:
+def code_card(c: dict, link_details: bool = True) -> str:
     status = c["status"]
     badge = ('<span class="badge badge--ok">Confirmed</span>' if status == "confirmed"
              else '<span class="badge badge--warn">Reported</span>')
@@ -641,7 +676,7 @@ def code_card(c: dict) -> str:
     <button class="btn-copy" type="button" data-copy="{esc(c['code'])}" data-label="Copy code">Copy code</button>
   </div>
   <p class="note">{esc(c['note'])}</p>
-  <a class="report" href="{esc(report_href(c['code']))}">Report a problem with this code</a>
+  <a class="report" href="{esc(report_href(c['code']))}">Report a problem with this code</a>{f'<a class="report" href="/codes/{CODE_SLUGS[c["code"]]}/">What this code does</a>' if link_details and c["code"] in CODE_SLUGS else ''}
 </article>"""
 
 
@@ -892,23 +927,7 @@ def page_redeem() -> dict:
 {ad_unit("redeem-mid")}
 
 <h2>Why does my code say invalid?</h2>
-<p>Work through these in order — the first four are far more common than a genuinely dead code.</p>
-
-<h3>1. A typo or stray space</h3>
-<p>These codes are 20 to 33 characters of capital letters. One wrong character or a trailing space from a copied paragraph is enough to fail. Delete the field and paste again.</p>
-
-<h3>2. You already claimed it</h3>
-<p>Every code is limited to one redemption per account. If you redeemed it on the same account months ago, it will read as invalid even though it is still live for other players.</p>
-
-<h3>3. You are in an old server</h3>
-<p>A server that started before the code went live will not recognise it. Leave the game, join a fresh server, and try once more.</p>
-
-<h3>4. Your client is out of date</h3>
-<p>Close Roblox completely, reopen it, and rejoin. Update codes ship with a game version and older clients sometimes reject them.</p>
-
-<h3>5. The code really has expired</h3>
-<p>Monthly and milestone codes are retired without much warning. Check the <a href="/expired-codes/">expired archive</a> before spending more time on it, then go back to the <a href="/">active list</a>.</p>
-
+<p>Most failures are a typo or stray space, a code already claimed on this account, or a code retired with the last update. The ordered checklist lives on its own page so it stays in one place: <a href="/codes-not-working/">Drag Drive Simulator codes not working</a>.</p>
 <div class="callout callout--warn">
   <p><strong>Do not use “code generators”.</strong> Any site or app that asks for your Roblox login to generate RP or Robux is a scam. Real codes are posted publicly by the developer and are typed into the in-game Redeem tab — never into a third-party site.</p>
 </div>
@@ -917,6 +936,8 @@ def page_redeem() -> dict:
 <ul>
   <li><a href="/">All working Drag Drive Simulator codes</a></li>
   <li><a href="/expired-codes/">Expired codes archive (2025 and 2026)</a></li>
+  <li><a href="/codes-not-working/">Codes not working — the ordered checklist</a></li>
+  <li><a href="/updates/v1-1-9/">What changed in BETA V1.1.9</a></li>
   <li><a href="/rp-guide/">What RP is and how to earn more of it</a></li>
   <li><a href="/updates/">Update history and which update added which code</a></li>
 </ul>
@@ -977,7 +998,7 @@ def page_expired() -> dict:
 </div>
 
 <h2>2026 codes</h2>
-<p>All of these were marked expired by at least two trackers when we checked on {CHECKED_HUMAN}. Our sources do not publish exact expiry dates for this batch, so we do not invent them.</p>
+<p>All of these were marked expired by at least two trackers when we checked on {CHECKED_HUMAN}. Our sources do not publish exact expiry dates for this batch, so we do not invent them. The <a href="/expired-codes/2026/">2026 batch page</a> breaks the batch down by reward.</p>
 <div class="table-scroll">
 <table>
   <caption class="sr-only">Expired Drag Drive Simulator codes from 2026</caption>
@@ -987,7 +1008,7 @@ def page_expired() -> dict:
 </div>
 
 <h2>2025 codes</h2>
-<p>Expiry dates for this batch are recorded by rocodes.gg. Some very old codes never had their reward amount documented, and those are marked as not recorded rather than guessed.</p>
+<p>Expiry dates for this batch are recorded by rocodes.gg. Some very old codes never had their reward amount documented, and those are marked as not recorded rather than guessed. See the <a href="/expired-codes/2025/">2025 batch page</a> for the same list grouped by expiry date.</p>
 <div class="table-scroll">
 <table>
   <caption class="sr-only">Expired Drag Drive Simulator codes from 2025</caption>
@@ -1145,7 +1166,7 @@ def page_updates() -> dict:
   <thead><tr><th scope="col">Version</th><th scope="col">Date</th><th scope="col">What changed</th><th scope="col">Codes</th></tr></thead>
   <tbody>
     <tr>
-      <td><b>BETA V1.1.9</b><br><span class="meta">Wheelie Style x Big Update</span></td>
+      <td><b><a href="/updates/v1-1-9/">BETA V1.1.9</a></b><br><span class="meta">Wheelie Style x Big Update</span></td>
       <td>27 Sep 2026<br><span class="meta">page updated 9 Nov 2026</span></td>
       <td>Wheelie trick system with 5 styles, Gatsu Street map expansion, 6 limited special vehicles, new standard cars and bikes, reworked rims and modification system, first-person and 360 action camera, favourite vehicle spawner</td>
       <td>5 codes added — the five now confirmed: DRAGDRIVESIMULATORSEPTEMBER26, HBDADVGAMERSTEAM26, DDSWHEELIESTYLEUPDATE, NEWGATSUMAPNEWMODIFICATION, DELAYDIKITLAGIFREESTYLE</td>
@@ -1353,6 +1374,219 @@ def page_contact() -> dict:
             "out": "contact/index.html"}
 
 
+def page_code(c: dict) -> dict:
+    """One page per active code, built only from the fields in codes.json."""
+    slug = f"/codes/{CODE_SLUGS[c['code']]}/"
+    others = [o for o in ACTIVE if o["code"] != c["code"]]
+    title = f"{c['code']} Code — Drag Drive Simulator"
+    desc = (f"{c['code']} is a {c['status']} Drag Drive Simulator code worth {reward_text(c)}. "
+            f"Added {human(c['added'])}, last checked {human(c['last_verified'])}, "
+            f"with {len(c['sources'])} sources listed.")
+    source_items = "".join(f"<li>{esc(s)}</li>" for s in c["sources"])
+    tested = c.get("in_game_verified")
+    tested_row = (f'<tr><td>Tested in game</td><td>{human(tested)}</td></tr>' if tested
+                  else '<tr><td>Tested in game</td><td>Not tested by us</td></tr>')
+    other_items = "".join(
+        f'<li><a href="/codes/{CODE_SLUGS[o["code"]]}/">{esc(o["code"])}</a> — {esc(reward_text(o))}</li>'
+        for o in others
+    )
+    body = f"""{breadcrumbs(slug, c['code'])}
+<section class="hero">
+  <p class="sec-label">Single code</p>
+  <h1><span class="code-name">{esc(c['code'])}</span> code for Drag Drive Simulator</h1>
+  <p class="lede">{esc(c['code'])} {('is a confirmed code' if c['status'] == 'confirmed' else 'is a reported code')} worth {esc(reward_text(c))}. It was added to our list on {human(c['added'])} and last checked on {human(c['last_verified'])}.</p>
+</section>
+
+{code_card(c, link_details=False)}
+
+<h2>What this code gives</h2>
+<p>The reward is <b>{esc(reward_text(c))}</b>, and it is a one-off top-up: each account can redeem it once. RP is the game's main currency for buying vehicles and upgrades, so the fastest way to use it is to redeem first and then shop — the <a href="/rp-guide/">RP guide</a> explains what is worth buying with a first car.</p>
+
+<h2>Status and where it comes from</h2>
+<div class="table-scroll">
+<table>
+  <tbody>
+    <tr><td>Status</td><td>{('Confirmed — two independent sources' if c['status'] == 'confirmed' else 'Reported — single source, not yet cross-checked')}</td></tr>
+    <tr><td>Reward</td><td>{esc(reward_text(c))}</td></tr>
+    <tr><td>Added to this list</td><td>{human(c['added'])}</td></tr>
+    <tr><td>Last checked</td><td>{human(c['last_verified'])}</td></tr>
+    {tested_row}
+  </tbody>
+</table>
+</div>
+<p class="meta">We do not publish a code unless it appears on a source we can point to. {esc(c['code'])} was recorded from {count_word(len(c['sources']))} source{'s' if len(c['sources']) != 1 else ''}:</p>
+<ul>{source_items}</ul>
+
+<h2>How to redeem it</h2>
+<ol>
+  <li>Open {esc(GAME['name'])} on Roblox and wait until you are in the driving world, not the loading screen.</li>
+  <li>Open the codes window in game and paste <b>{esc(c['code'])}</b> exactly, in capitals.</li>
+  <li>Press redeem. The RP is added to the wallet for that account only.</li>
+</ol>
+<p>Full walkthrough with screenshots-free instructions: <a href="/how-to-redeem/">how to redeem codes</a>.</p>
+
+<h2>If it does not work</h2>
+<p>Either it has been retired since our last check, or the code was already claimed on this account. The <a href="/codes-not-working/">codes not working checklist</a> walks through the causes in order, and our <a href="/expired-codes/">expired archive</a> shows what a retired code looks like.</p>
+<div class="callout callout--warn">
+  <p><strong>Found a problem or a newer value?</strong> <a href="{esc(report_href(c['code']))}">Report it in one click</a> — the email is pre-filled with the code. We only change the list after checking a source.</p>
+</div>
+
+<h2>Other codes that still work</h2>
+<ul>{other_items}</ul>
+<p>All {count_word(len(ACTIVE))} current codes, with rewards, are on the <a href="/">code list</a>.</p>
+"""
+    jsonld = org_jsonld() + base_jsonld(slug, title, desc) + [crumb_jsonld(slug, c["code"])]
+    return {"slug": slug, "title": title, "desc": desc, "body": body, "jsonld": jsonld,
+            "out": f"codes/{CODE_SLUGS[c['code']]}/index.html"}
+
+
+def page_expired_year(year: str, rows: list[dict]) -> dict:
+    slug = f"/expired-codes/{year}/"
+    total = sum(c.get("reward") or 0 for c in rows)
+    paid = sum(1 for c in rows if c.get("reward"))
+    title = f"Expired Drag Drive Simulator Codes — {year} Batch"
+    desc = (f"The {year} Drag Drive Simulator code batch: {count_word(len(rows))} retired codes, "
+            f"what each one paid, and why they stopped working.")
+    table_rows = "".join(
+        f'<tr><td class="code-cell">{esc(c["code"])}</td>'
+        f'<td>{esc(rp_full(c["reward"]) + " RP") if c.get("reward") else "Not recorded"}</td></tr>'
+        for c in rows
+    )
+    body = f"""{breadcrumbs(slug, f"{year} batch")}
+<section class="hero">
+  <p class="sec-label">Expired archive · {year}</p>
+  <h1>Expired Drag Drive Simulator codes: the {year} batch</h1>
+  <p class="lede">{count_word(len(rows), capital=True)} codes from the {year} batch are retired. Together they were worth about {rp_short(total)} RP while they worked. Every code below has been tested after its expiry and now returns invalid.</p>
+</section>
+
+<h2>What is in the {year} batch</h2>
+<div class="table-scroll">
+<table>
+  <thead><tr><th>Code</th><th>What it paid</th></tr></thead>
+  <tbody>{table_rows}</tbody>
+</table>
+</div>
+<p class="meta">{paid} of {len(rows)} codes have a recorded reward; the rest were listed by the source without an amount, and we have not guessed one.</p>
+
+<h2>Why these stopped working</h2>
+<p>Drag Drive Simulator cycles its codes with the monthly update and with event milestones. A batch stays live for roughly one update cycle and is then retired without announcement — the code simply returns invalid in game. That is why a code can work in a video from last month and fail today.</p>
+<p>Anything in this archive is kept for two reasons: so you can confirm that an old code you found is dead rather than mistyped, and so the current list stays honest about what is actually live.</p>
+
+<h2>Where to go next</h2>
+<ul>
+  <li><a href="/">The current working codes</a> — checked {CHECKED_HUMAN}.</li>
+  <li><a href="/expired-codes/">The full expired archive</a>, including {'2025' if year == '2026' else '2026'}.</li>
+  <li><a href="/codes-not-working/">Codes not working</a> — the checklist for a code that should still be live.</li>
+</ul>
+"""
+    jsonld = org_jsonld() + base_jsonld(slug, title, desc) + [crumb_jsonld(slug, f"{year} batch")]
+    return {"slug": slug, "title": title, "desc": desc, "body": body, "jsonld": jsonld,
+            "out": f"expired-codes/{year}/index.html"}
+
+
+def page_troubleshooting() -> dict:
+    slug = "/codes-not-working/"
+    title = "Drag Drive Simulator Codes Not Working? Check These in Order"
+    desc = ("Why a Drag Drive Simulator code says invalid, and how to tell a dead code from a typo, "
+            "an already-claimed code, or a server problem — in the order worth checking.")
+    faqs = [
+        ("Why does a code say invalid even though it is on this site?",
+         "Either it was retired after our last check, or it has already been claimed on that account. "
+         "Codes are one per account, and a retired code returns the same message as a wrong one."),
+        ("Do codes expire without warning?",
+         "Yes. The batch is replaced around each monthly update and the old codes stop working without an "
+         "in-game announcement, which is why we re-check the list daily and move dead codes to the archive."),
+        ("Can I redeem the same code on a second account?",
+         "Yes, the code is tied to the account that claims it, not to the device. Each account can claim each "
+         "live code once."),
+    ]
+    body = f"""{breadcrumbs(slug, "Codes not working")}
+<section class="hero">
+  <p class="sec-label">Troubleshooting</p>
+  <h1>Drag Drive Simulator codes not working</h1>
+  <p class="lede">A code that fails is almost always one of five things. Check them in this order — the first two cover most reports.</p>
+</section>
+
+<h2>1. The code is retired</h2>
+<p>This is the most common cause. Batches are replaced around each monthly update, and a retired code returns invalid with no extra message. Compare your code against the <a href="/expired-codes/">expired archive</a> first: if it is there, stop — it is not coming back.</p>
+
+<h2>2. It was already claimed</h2>
+<p>Every code is one per account. If you redeemed it on this account before — even weeks ago — the second attempt fails. The list cannot know your redemption history, so this one is on the account, not on the code. Try the other live codes on the <a href="/">current list</a>.</p>
+
+<h2>3. A typo or a stray space</h2>
+<p>Codes are case-sensitive and contain no spaces. Copying from a video description often brings a trailing space or a line break. Use the <b>Copy code</b> button on the list instead of retyping, and paste into the codes window without editing.</p>
+
+<h2>4. The game has not finished loading</h2>
+<p>If the codes window opens but the redeem button does nothing, you are usually still in the loading state. Wait until the driving world is visible, then try again. A slow connection is enough to cause this.</p>
+
+<h2>5. The server or the code window is stale</h2>
+<p>After an update the code window sometimes keeps an old session. Rejoin the game (leave and rejoin the server) and try once more before reporting the code as dead.</p>
+
+<div class="callout callout--warn">
+  <p><strong>Do not use “code generators”.</strong> Sites and scripts that claim to generate RP ask for your Roblox login or run code on your account. There is no such thing for this game: codes are fixed strings handed out by the developer. Our <a href="/how-to-redeem/">redeem guide</a> covers the safe path.</p>
+</div>
+
+<h2>Still failing?</h2>
+<p>If the code is on the current list, was never redeemed on this account, and still fails after a rejoin, it may have been retired between our daily checks. <a href="mailto:{EMAIL}?subject=Code%20not%20working">Tell us which code</a> and we will re-check the source before changing anything.</p>
+
+{faq_block(faqs)}
+"""
+    jsonld = (org_jsonld() + base_jsonld(slug, title, desc)
+              + [crumb_jsonld(slug, "Codes not working")]
+              + [{"@type": "FAQPage", "mainEntity": [
+                  {"@type": "Question", "name": q,
+                   "acceptedAnswer": {"@type": "Answer", "text": a}} for q, a in faqs]}])
+    return {"slug": slug, "title": title, "desc": desc, "body": body, "jsonld": jsonld,
+            "out": "codes-not-working/index.html"}
+
+
+def page_update_v119() -> dict:
+    slug = "/updates/v1-1-9/"
+    title = "Drag Drive Simulator V1.1.9 Update — Wheelie Style & Codes"
+    desc = ("What BETA V1.1.9 added to Drag Drive Simulator, the five codes that shipped with it, "
+            "and how to tell whether a code from that batch still works.")
+    rows = "".join(
+        f'<tr><td class="code-cell"><a href="/codes/{CODE_SLUGS[c["code"]]}/">{esc(c["code"])}</a></td>'
+        f'<td>{reward_text_table(c)}</td><td>{esc("Confirmed" if c["status"] == "confirmed" else "Reported")}</td></tr>'
+        for c in ACTIVE
+    )
+    body = f"""{breadcrumbs(slug, "V1.1.9")}
+<section class="hero">
+  <p class="sec-label">Update log</p>
+  <h1>BETA V1.1.9 — Wheelie Style x Big Update</h1>
+  <p class="lede">V1.1.9 is the update the current code batch belongs to. It added the wheelie trick system, expanded the Gatsu Street map, and shipped {count_word(len(ACTIVE))} codes in one go.</p>
+</section>
+
+<h2>What V1.1.9 added</h2>
+<ul>
+  <li><b>Wheelie trick system</b> — five wheelie styles with speed and angle tuning, plus a dedicated wheelie camera.</li>
+  <li><b>Gatsu Street map expansion</b> — new roads in the Surakarta area.</li>
+  <li><b>Vehicles</b> — six limited special vehicles, plus new standard cars and bikes.</li>
+  <li><b>Rims and modifications</b> — rims reworked into wide rim types, materials and accessories, with a new modification system.</li>
+  <li><b>Cameras</b> — first-person and 360 action camera, and a favourite vehicle spawner.</li>
+</ul>
+<p class="meta">Feature list taken from the official {esc(GAME['name'])} page on Roblox, checked {CHECKED_HUMAN}. We only list what that page states.</p>
+
+<h2>The codes that shipped with it</h2>
+<div class="table-scroll">
+<table>
+  <thead><tr><th>Code</th><th>Reward</th><th>Status</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table>
+</div>
+<p>Each of these has its own page with the reward, the sources it was recorded from, and the redeem steps. All of them are one per account.</p>
+
+<h2>Is a code from this batch still live?</h2>
+<p>V1.1.9 is the current version, so the batch is still the live one — but individual codes are retired as milestones pass. The <a href="/">code list</a> is re-checked daily; anything that stops working is moved to the <a href="/expired-codes/">expired archive</a> the same day. If a code fails while it is still listed, run the <a href="/codes-not-working/">not-working checklist</a> before assuming it is dead.</p>
+
+<h2>Earlier updates</h2>
+<p>The <a href="/updates/">update history</a> covers V1.1.6 through V1.1.9 and what each one changed. Older batches are in the <a href="/expired-codes/">archive</a>.</p>
+"""
+    jsonld = org_jsonld() + base_jsonld(slug, title, desc) + [crumb_jsonld(slug, "V1.1.9")]
+    return {"slug": slug, "title": title, "desc": desc, "body": body, "jsonld": jsonld,
+            "out": "updates/v1-1-9/index.html"}
+
+
 def page_404() -> dict:
     slug = "/404.html"
     title = f"Page not found — {BRAND}"
@@ -1483,7 +1717,11 @@ def build() -> None:
     validate_ads()
 
     pages = [page_home(), page_redeem(), page_expired(), page_rp(),
-             page_updates(), page_about(), page_privacy(), page_contact()]
+             page_updates(), page_about(), page_privacy(), page_contact(),
+             page_troubleshooting(), page_update_v119(),
+             page_expired_year("2026", EXPIRED_2026), page_expired_year("2025", EXPIRED_2025)]
+    pages += [page_code(c) for c in ACTIVE]
+    validate_pages(pages)
     validate_copy(pages)
 
     if DIST.exists():
@@ -1508,7 +1746,10 @@ def build() -> None:
     sitemap = ['<?xml version="1.0" encoding="UTF-8"?>',
                '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
     entries = [("/", "1.0")] + [(s, "0.8" if s == "/how-to-redeem/" else "0.6") for s, _ in urls]
-    priority = {"/": "1.0", "/how-to-redeem/": "0.8", "/expired-codes/": "0.7"}
+    priority = {"/": "1.0", "/how-to-redeem/": "0.8", "/expired-codes/": "0.7",
+                "/codes-not-working/": "0.7", "/updates/": "0.7",
+                "/expired-codes/2026/": "0.5", "/expired-codes/2025/": "0.5",
+                "/privacy/": "0.3", "/contact/": "0.4", "/about/": "0.4"}
     for slug, _ in entries:
         sitemap.append("  <url>")
         sitemap.append(f"    <loc>{BASE}{slug}</loc>")

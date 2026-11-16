@@ -247,7 +247,7 @@ python scripts\gsc_submit.py             # 真的提交（需要凭证 + 已上�
 
 ## 自测结果（2026-11-16）
 
-**当前批次 V1.2.0（6 个有效码 / 19 个可索引页）构建期断言**：`data validation OK (50 unique codes, 6 active)` → `page validation OK (19 pages, 6 code pages)` → `copy validation OK (number words match 6 active codes)`。**2026-11-16 上线前重跑**：20 个 HTML × 320/375/1280 三视口共 60 组 0 失败，623 条内部链接全部 200，16 组 320/360 窄屏检查 0 失败，`dist-local/` file:// 预览 0 失败，广告相关标记 0 处，sitemap 19 条。
+**当前批次 V1.2.0（6 个有效码 / 19 个可索引页）构建期断言**：`data validation OK (50 unique codes, 6 active)` → `page validation OK (19 pages, 6 code pages)` → `copy validation OK (number words match 6 active codes)`。**2026-11-16 上线前重跑**：20 个 HTML × 320/375/1280 三视口共 60 组 0 失败，637 条内部链接全部 200，16 组 320/360 窄屏检查 0 失败，`dist-local/` file:// 预览 0 失败，广告相关标记 0 处，sitemap 19 条。同日补内链后复跑：`/how-to-redeem/` 增加 6 个码页入口、码页增加所属 update 行、年份页互链，全部页面仍 ≤2 跳到首页，无孤儿页。
 
 **上一批（17 页 / 5 码）构建期断言**：`data validation OK (49 unique codes, 5 active)` → `page validation OK (17 pages, 5 code pages)` → `copy validation OK (number words match 5 active codes)`。7 类坏数据（重复码、日期倒挂、单来源 confirmed、奖励区间倒挂、状态与列表不一致、实测日期非法、正文数量词不一致）均已实测会让构建以退出码 1 失败，且失败时 `dist/` 保留上一版。`validate_pages()` 另查 slug/输出路径唯一、除 `/` 外每个页面都有 `dist-local` 扁平名、每个 active 码都有详情页。
 

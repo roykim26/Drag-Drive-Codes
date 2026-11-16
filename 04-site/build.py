@@ -63,6 +63,9 @@ GAME = SITE["game"]
 # One indexable page per active code. The slug is the lowercase code itself, which
 # is what people search for, and it is also what dist-local needs to stay flat.
 CODE_SLUGS = {c["code"]: c["code"].lower() for c in CODES["active"]}
+# Each active code belongs to a named update; link the code page back to that
+# update so the two stay cross-referenced in both directions.
+BATCH_PAGES = {"V1.2.0": "/updates/v1-2-0/", "V1.1.9": "/updates/v1-1-9/"}
 LOCAL_NAMES.update({f"/codes/{s}/": f"{s}.html" for s in CODE_SLUGS.values()})
 LOCAL_NAMES.update({
     "/expired-codes/2026/": "expired-codes-2026.html",
@@ -975,6 +978,12 @@ def page_redeem() -> dict:
 
 {ad_unit("redeem-mid")}
 
+<h2>The codes this walkthrough covers</h2>
+<p>Each code has its own page with the exact spelling, reward and sources, so you can check one code without scanning the whole list:</p>
+<ul>
+{''.join(f'<li><a href="/codes/{CODE_SLUGS[c["code"]]}/">{esc(c["code"])}</a> — {esc(reward_text(c))}</li>' for c in ACTIVE)}
+</ul>
+
 <h2>Why does my code say invalid?</h2>
 <p>Most failures are a typo or stray space, a code already claimed on this account, or a code retired with the last update. The ordered checklist lives on its own page so it stays in one place: <a href="/codes-not-working/">Drag Drive Simulator codes not working</a>.</p>
 <div class="callout callout--warn">
@@ -1465,6 +1474,9 @@ def page_code(c: dict) -> dict:
         f'<li><a href="/codes/{CODE_SLUGS[o["code"]]}/">{esc(o["code"])}</a> — {esc(reward_text(o))}</li>'
         for o in others
     )
+    batch = str(c.get("batch") or "")
+    update_row = (f'<tr><td>Update</td><td><a href="{BATCH_PAGES[batch]}">BETA {esc(batch)}</a></td></tr>'
+                  if batch in BATCH_PAGES else "")
     body = f"""{breadcrumbs(slug, c['code'])}
 <section class="hero">
   <p class="sec-label">Single code</p>
@@ -1482,6 +1494,7 @@ def page_code(c: dict) -> dict:
 <table>
   <tbody>
     <tr><td>Status</td><td>{esc(STATUS_ROW[c['status']])}</td></tr>
+    {update_row}
     <tr><td>Reward</td><td>{esc(reward_text_table(c))}</td></tr>
     <tr><td>Added to this list</td><td>{human(c['added'])}</td></tr>
     <tr><td>Last checked</td><td>{human(c['last_verified'])}</td></tr>
@@ -1550,7 +1563,7 @@ def page_expired_year(year: str, rows: list[dict]) -> dict:
 <h2>Where to go next</h2>
 <ul>
   <li><a href="/">The current working codes</a> — checked {CHECKED_HUMAN}.</li>
-  <li><a href="/expired-codes/">The full expired archive</a>, including {'2025' if year == '2026' else '2026'}.</li>
+  <li><a href="/expired-codes/">The full expired archive</a> — including <a href="/expired-codes/{'2025' if year == '2026' else '2026'}/">the {'2025' if year == '2026' else '2026'} batch</a>.</li>
   <li><a href="/codes-not-working/">Codes not working</a> — the checklist for a code that should still be live.</li>
 </ul>
 """

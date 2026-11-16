@@ -1,6 +1,6 @@
 # DragDriveCodes — 可部署静态站点
 
-纯前端静态站，无框架、无外部请求。18 个 HTML 页面（17 个可索引页 + 404）+ sitemap + robots + ads.txt 占位。
+纯前端静态站，无框架；构建产物不含任何外部脚本。线上唯一的外部请求是 Cloudflare 边缘注入的 Web Analytics beacon（在 Cloudflare 后台开启，不经过本仓库）。20 个 HTML 页面（19 个可索引页 + 404）+ sitemap + robots + ads.txt 占位。
 
 站点域名 `https://dragdrivecodes.space`（唯一来源：`data/site.json` 的 `base_url`；代码里没有硬编码域名，换域名只改这一处）。
 
@@ -17,33 +17,34 @@
 │  └─ codes.json       所有兑换码（唯一数据源：有效 / 待确认 / 过期）
 ├─ scripts/
 │  ├─ patrol.py        官方接口每日巡检（标准库 only，只报告不写码表）
-│  └─ gsc_submit.py    GSC sitemap 提交（可选；需要服务账号，当前未验证）
+│  └─ gsc_submit.py    GSC sitemap 提交 / 状态查询（服务账号已配置，凭证不入库）
 ├─ dist/               构建产物（可直接部署，勿手改）
 ├─ dist-local/         本地双击预览用（扁平 .html + 相对链接，不部署）
 ├─ .gitignore          忽略 dist/、dist-local/、凭证文件、本地预览截图
 └─ preview/            本地实测截图（移动端 375px / 桌面 1280px）
 ```
 
-`dist/` 里最终包含：18 个 HTML、`sitemap.xml`、`robots.txt`、`ads.txt`、`og.png`、`favicon.ico`、`_headers`、`_redirects`。其中 `_headers` / `_redirects` 是 Cloudflare Pages 的约定文件（构建时生成，不要手写进 `dist/`）。`dist-local/` 只有 18 个扁平 HTML + `favicon.ico` + `og.png`，**永远不要上传它**（里面的 canonical 指向生产域名，扁平文件名与 canonical 路径不一致）。
+`dist/` 里最终包含：20 个 HTML、`sitemap.xml`、`robots.txt`、`ads.txt`、`og.png`、`favicon.ico`、`_headers`、`_redirects`。其中 `_headers` / `_redirects` 是 Cloudflare Pages 的约定文件（构建时生成，不要手写进 `dist/`）。`dist-local/` 只有 20 个扁平 HTML + `favicon.ico` + `og.png`，**永远不要上传它**（里面的 canonical 指向生产域名，扁平文件名与 canonical 路径不一致）。
 
-### 页面结构（17 个可索引页）
+### 页面结构（19 个可索引页）
 
 | 路径 | 搜索意图 |
 |---|---|
 | `/` | drag drive simulator codes（主词，当月有效码） |
-| `/codes/<code>/` ×5 | 精确码查询（`<code> code`、`what does <code> give`） |
+| `/codes/<code>/` ×6 | 精确码查询（`<code> code`、`what does <code> give`） |
 | `/how-to-redeem/` | drag drive simulator how to redeem codes |
 | `/codes-not-working/` | 兑换失败 / invalid code / code not working 排障长尾 |
 | `/expired-codes/` | expired drag drive simulator codes（总览） |
 | `/expired-codes/2026/`、`/expired-codes/2025/` | 按年份批次查过期码 |
 | `/updates/` | drag drive simulator update history |
-| `/updates/v1-1-9/` | BETA V1.1.9 更新日志（单版本页） |
+| `/updates/v1-2-0/` | BETA V1.2.0 更新日志（单版本页） |
+| `/updates/v1-1-9/` | BETA V1.1.9 更新日志（历史版本页） |
 | `/rp-guide/` | what is RP in drag drive simulator |
 | `/about/` | 站点核验方法与可信度 |
 | `/privacy/`、`/contact/` | 合规与举报入口 |
 | `/404.html` | noindex，不进 sitemap |
 
-码详情页、年份页、排障页、单版本更新页均由 `build.py` 的 `page_code()` / `page_expired_year()` / `page_troubleshooting()` / `page_update_v119()` 生成；新增 active 码会自动多出一个详情页，`validate_pages()` 会检查每个 active 码都有落点、路径与 `dist-local` 扁平文件名一一对应。
+码详情页、年份页、排障页、单版本更新页均由 `build.py` 的 `page_code()` / `page_expired_year()` / `page_troubleshooting()` / `page_update_v119()` / `page_update_v120()` 生成；新增 active 码会自动多出一个详情页，`validate_pages()` 会检查每个 active 码都有落点、路径与 `dist-local` 扁平文件名一一对应。
 
 ## 构建与本地预览
 
@@ -135,6 +136,28 @@ python -m http.server 8123 --directory dist
 
 **同意管理（未实现，上线前必须处理）**：AdSense 对 EEA / UK / 瑞士用户要求经 Google 认证的 CMP 做同意收集；当前站点没有 Cookie 条、也没有 CMP，因此在上述地区投放是不合规的。接广告前要么在 AdSense 后台启用 Google 的同意管理平台，要么接入其他认证 CMP，并同步更新 `/privacy/` 文案。
 
+## 访问统计（Cloudflare Web Analytics，后台开启，仓库外）
+
+在 Cloudflare 控制台 **Workers & Pages → drag-drive-codes → Metrics → Web Analytics** 开启。它不经过仓库：`build.py`、`dist/`、`dist-local/` 里都没有分析代码，本地预览也不会产生数据。
+
+**2026-11-16 实测状态（已启用、已生效、已有数据）**：
+
+- 线上首页响应里确实有 `<!-- Cloudflare Pages Analytics -->` 与 `static.cloudflareinsights.com/beacon.min.js`（带 `data-cf-beacon` token），说明边缘注入已生效，不是「后台开了但没上线」。
+- Cloudflare GraphQL（`rumPageloadEventsAdaptiveGroups`）里已有记录：首次出现数据是 **2026-11-15**，当天 `dragdrivecodes.space` + `www` 共 **130** PV；2026-11-16 截至查询时 **20** PV。更早（2026-06 起查）无数据，符合「11-15 才开启」。
+- 账号下有第二个 site tag 记录的是 `drag-drive-codes.pages.dev` 预览域名的访问（11-16 共 12 PV），与正式域名分开计。
+
+| 项 | 说明 |
+|---|---|
+| 注入方式 | Cloudflare 在 HTML 响应末尾注入 `static.cloudflareinsights.com/beacon.min.js`，数据上报到本站 `/cdn-cgi/rum`；已生效 |
+| 前提 | HTML 响应不能带 `Cache-Control: public, no-transform`。当前 `_headers` 只给 `og.png` / `favicon.ico` 设缓存，无冲突 |
+| 验证 | `curl.exe -s https://dragdrivecodes.space/ \| Select-String "cloudflareinsights\|data-cf-beacon"`；DevTools Network 里应出现 `POST /cdn-cgi/rum` |
+| 隐私 | 站点自设 Cookie 为 0；全页唯一的第三方请求就是这个 beacon。Cloudflare 将其描述为 cookieless：不写 Cookie、不在浏览器留标识、不跨站跟踪。`/privacy/` 已按此措辞同步 |
+| 数据口径 | 只有 PV/UV、来源、国家、路径、浏览器/设备、Web Vitals；**没有自定义事件**（Copy 按钮点击统计不到），搜索词仍看 GSC |
+| 已知偏差 | adblock / Brave / DuckDuckGo 会拦截 beacon，真实流量被低估；Cloudflare 称原始未抽样数据保留约 7 天，更早的会降采样 |
+| CSP | 现在没有 CSP；以后若加，需 `script-src https://static.cloudflareinsights.com/beacon.min.js` + `connect-src 'self'` |
+
+GA4 仍未接入：它需要 Cookie 同意提示，且会给页面再加一套第三方脚本；只有需要漏斗/事件分析时再评估。
+
 ## 每日巡检（`scripts/patrol.py`，只报告不写站）
 
 拉 Roblox 官方 games API 快照 → 与上次快照 diff `updated` 与 `description` → 正则抽候选码 → 输出「疑似新码 / 疑似失效」清单。**只标需人工确认，绝不自动改 `codes.json` 或任何页面。**
@@ -195,18 +218,18 @@ python scripts\patrol.py                    # 正常跑（写快照 + 报告，�
 1. DNS 已接入 Cloudflare（NS 为 `curt` / `daphne`），`dragdrivecodes.space` 与 `www` 已绑定 Pages 且 Active；`www` 通过 Redirect Rule 301 到 apex。
 2. 托管账号（Cloudflare Pages 免费额度足够）。
 3. 联系邮箱已就绪：`contact@` 与 `abuse@` 经 Cloudflare Email Routing 转发，只负责收信，回复从个人邮箱发出。
-4. Google Search Console 验证 + 提交 `sitemap.xml`（脚本已备：`python scripts/gsc_submit.py --check`）。
-5. 分析工具（建议 Cloudflare Web Analytics，无 Cookie 免同意条；GA4 需加同意提示）。
-6. AdSense：账号申请、审核通过后把 pub-id 写入 `dist/ads.txt` 并插入广告代码。**当前 17 个可索引页，已过 15 页门槛。** 受众含未成年人，勿开个性化定向、勿使用儿童定向标记。
+4. Google Search Console：已完成网域资源验证并提交 sitemap（2026-11-16，19 条 URL，0 错误）。
+5. 分析：Cloudflare Web Analytics **已接入**（Pages → Metrics 开启，无 Cookie 免同意条，产物零改动）；GA4 未接入，若接入需加同意提示。
+6. AdSense：账号申请、审核通过后把 pub-id 写入 `dist/ads.txt` 并插入广告代码。**当前 19 个可索引页，已过 15 页门槛。** 受众含未成年人，勿开个性化定向、勿使用儿童定向标记。
 7. 广告位已改为**配置驱动**（`data/site.json` 的 `ads`）。默认关闭时不输出任何广告相关字节；接入流程见下一节「广告位（配置驱动）」。
 
-## GSC 自动提交 sitemap（脚本可用，链路未验证）
+## GSC sitemap（已接入，可查询状态）
 
 ```powershell
 python scripts\gsc_submit.py --check     # 只查前置条件，不发请求
 python scripts\gsc_submit.py --dry-run   # 打印将要发送的 PUT，不发
 python scripts\gsc_submit.py --status    # 只读：sitemap 列表、错误数、最后读取时间
-python scripts\gsc_submit.py --inspect   # 只读：逐条 URL Inspection（串行，17 条）
+python scripts\gsc_submit.py --inspect   # 只读：逐条 URL Inspection（串行，19 条）
 python scripts\gsc_submit.py             # 真的提交（需要凭证 + 已上线）
 ```
 
@@ -216,19 +239,21 @@ python scripts\gsc_submit.py             # 真的提交（需要凭证 + 已上�
 2. 环境变量 `GSC_SERVICE_ACCOUNT_FILE`（文件路径）
 3. 本地文件 `gsc-service-account.json`（已在 `.gitignore`）
 
-需要 `pip install google-auth`。**当前状态：站点已上线；属性是网域资源 `sc-domain:dragdrivecodes.space`（DNS TXT 已验证），但本机还没有服务账号密钥。** `--check` 现在会返回退出码 1 并打印 `NOT VERIFIED`，这是预期行为，不是脚本坏了。
+需要 `pip install google-auth`。**当前状态：网域资源 `sc-domain:dragdrivecodes.space` 已验证，服务账号密钥在本机 `gsc-service-account.json`（已 gitignore）。2026-11-16 提交结果：`submitted=19, indexed=0, errors=0, warnings=0`，Google 在提交后约 1 秒抓取 sitemap；`indexed=0` 是刚提交时的正常值，收录需要几天。**
 
 属性的写法只有一处：`data/site.json` 的 `gsc_property`。当前值是 `sc-domain:dragdrivecodes.space`；要切回 URL 前缀属性，把这一行改成 `https://dragdrivecodes.space/` 即可，其余代码不用动。sitemap 的 feedpath 始终是完整 URL `https://dragdrivecodes.space/sitemap.xml`，与属性形式无关。`--check` 会校验属性与 `base_url` 的 host 是否一致。
 
-还需要人工完成：建服务账号并启用 Search Console API → 把服务账号邮箱加为该属性的「完全」用户 → 把密钥交给上面三种方式之一。
+首次接入（或密钥轮换）时需要：建服务账号并启用 Search Console API → 把服务账号邮箱加为该属性的「完全」用户 → 把密钥交给上面三种方式之一。
 
-## 自测结果（2026-11-16 内容扩充后复测）
+## 自测结果（2026-11-16）
 
-**构建期断言**：`data validation OK (49 unique codes, 5 active)` → `page validation OK (17 pages, 5 code pages)` → `copy validation OK (number words match 5 active codes)`。7 类坏数据（重复码、日期倒挂、单来源 confirmed、奖励区间倒挂、状态与列表不一致、实测日期非法、正文数量词不一致）均已实测会让构建以退出码 1 失败，且失败时 `dist/` 保留上一版。`validate_pages()` 另查 slug/输出路径唯一、除 `/` 外每个页面都有 `dist-local` 扁平名、每个 active 码都有详情页。
+**当前批次 V1.2.0（6 个有效码 / 19 个可索引页）构建期断言**：`data validation OK (50 unique codes, 6 active)` → `page validation OK (19 pages, 6 code pages)` → `copy validation OK (number words match 6 active codes)`。**2026-11-16 上线前重跑**：20 个 HTML × 320/375/1280 三视口共 60 组 0 失败，623 条内部链接全部 200，16 组 320/360 窄屏检查 0 失败，`dist-local/` file:// 预览 0 失败，广告相关标记 0 处，sitemap 19 条。
 
-**静态检查**（18 个 HTML）：title/description/canonical/OG 齐全，每页唯一 H1，JSON-LD 可解析，全站 543 条内部链接全部 200，sitemap 17 条 URL 与页面一一对应，robots 含 Sitemap 指令。
+**上一批（17 页 / 5 码）构建期断言**：`data validation OK (49 unique codes, 5 active)` → `page validation OK (17 pages, 5 code pages)` → `copy validation OK (number words match 5 active codes)`。7 类坏数据（重复码、日期倒挂、单来源 confirmed、奖励区间倒挂、状态与列表不一致、实测日期非法、正文数量词不一致）均已实测会让构建以退出码 1 失败，且失败时 `dist/` 保留上一版。`validate_pages()` 另查 slug/输出路径唯一、除 `/` 外每个页面都有 `dist-local` 扁平名、每个 active 码都有详情页。
 
-**浏览器实测**（headless Chrome + CDP，18 页 × 3 视口 = 54 组 + 既有 27 组 + 8 页 × 320/360 窄屏）：
+**上一批静态检查**（18 个 HTML）：title/description/canonical/OG 齐全，每页唯一 H1，JSON-LD 可解析，全站 543 条内部链接全部 200，sitemap 17 条 URL 与页面一一对应，robots 含 Sitemap 指令。
+
+**上一批浏览器实测**（headless Chrome + CDP，18 页 × 3 视口 = 54 组 + 既有 27 组 + 8 页 × 320/360 窄屏）：
 - 控制台错误 0、页面异常 0、资源加载失败 0（仅故意访问不存在 URL 时出现预期的 404 日志）。
 - 复制按钮：点击后文案变为 `Copied`、背景变绿、`aria-live` 播报完整码值，1.6s 后复位；按钮高度 44px。
 - 举报入口：`mailto:contact@dragdrivecodes.space`，主题预填 `Code report: <CODE>`，移动端高度 44px。
@@ -237,7 +262,7 @@ python scripts\gsc_submit.py             # 真的提交（需要凭证 + 已上�
 - 实测徽标：线上 0 个（没有任何 `in_game_verified` 日期，符合事实）。
 - 首屏（375px）在 1 屏内呈现 H1 + 结论 + 统计 + 首个码卡；首屏无广告位。
 
-**性能**：每页 15–29KB，CSS/JS 全内联，零外部字体、零图片请求（OG 图仅供社交分享，favicon 走 `data:` URI，均不参与页面渲染）。
+**性能**：每页 15–29KB，CSS/JS 全内联，零外部字体、零图片请求（OG 图仅供社交分享，favicon 走 `data:` URI，均不参与页面渲染）。线上另有 1 个由 Cloudflare 边缘注入的 Web Analytics beacon，不写入 `dist/`。
 
 **域名切换核查**（`dragdrivecodes.com` → `dragdrivecodes.space`）：18 页的 canonical / `og:url` / `og:image` / `twitter:image`、sitemap 17 条 `<loc>`、`robots.txt` 的 Sitemap 行、`ads.txt`、JSON-LD `@id`、`mailto:` 全部为新域名；对 `dist/` 全量文本扫描 `dragdrivecodes.com` 命中 **0** 次。
 
@@ -261,7 +286,7 @@ python scripts\gsc_submit.py             # 真的提交（需要凭证 + 已上�
 | robots.txt + sitemap 引用 | 已做 |
 | 404 页面 + noindex | 已做 |
 | 移动端适配（320–1280 实测） | 已做 |
-| 性能（无外部请求、无 CLS 资源） | 已做 |
+| 性能（产物无外部请求、无 CLS 资源；线上仅边缘注入的分析 beacon） | 已做 |
 | hreflang / 多语言 | 本期不做（按定位要求）；结构为平级目录，后续可加 `/es/` |
 
 ## 不要做的事

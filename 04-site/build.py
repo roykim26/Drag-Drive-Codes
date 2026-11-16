@@ -141,6 +141,11 @@ def human(d: str) -> str:
 CHECKED_HUMAN = human(CHECKED)
 TITLE_MONTH = MONTHS[int(CHECKED[5:7])]
 
+# The privacy policy keeps its own effective date so that re-checking codes never
+# silently changes a legal date. Bump both lines whenever the policy text changes.
+PRIVACY_UPDATED = "2026-11-16"
+PRIVACY_UPDATED_HUMAN = human(PRIVACY_UPDATED)
+
 ACTIVE = CODES["active"]
 UNCONFIRMED = CODES["unconfirmed"]
 EXPIRED_2026 = CODES["expired"]["2026"]
@@ -1354,21 +1359,24 @@ def page_about() -> dict:
 def page_privacy() -> dict:
     slug = "/privacy/"
     title = f"Privacy Policy — {BRAND}"
-    desc = (f"How {BRAND} handles data: no accounts, no tracking cookies today, what the host logs contain, and what "
-            f"changes before any advertising is enabled.")
+    desc = (f"How {BRAND} handles data: no accounts, cookieless Cloudflare Web Analytics, what the host logs contain, "
+            f"and what changes before any advertising is enabled.")
     body = f"""
 {breadcrumbs(slug, 'Privacy')}
 <section class="hero">
   <p class="sec-label">Legal</p>
   <h1>Privacy Policy</h1>
-  <p class="lede">Effective {CHECKED_HUMAN}. This policy describes what this site does today, not what it might do later.</p>
+  <p class="lede">Effective {PRIVACY_UPDATED_HUMAN}. This policy describes what this site does today, not what it might do later.</p>
 </section>
 
 <h2>What this site collects</h2>
 <p>{BRAND} is a static website. It has no accounts, no comment system, no newsletter and no contact form. We do not ask for your name, email address, Roblox username or password, and we do not store any of them.</p>
 
 <h2>Cookies and analytics</h2>
-<p>This site sets no cookies of its own and currently runs no analytics or tracking scripts. The hosting provider may keep standard server logs, including IP address, browser type and requested URL, for security and abuse prevention. Those logs are controlled by the host, not by us.</p>
+<p>This site sets no cookies of its own and has no accounts, forms or newsletter. We use Cloudflare Web Analytics, a measurement service from the company that also hosts this site, to count page views and check page speed.</p>
+<p>The only third-party request on a page is its beacon script, <code>beacon.min.js</code> from <code>static.cloudflareinsights.com</code>. Cloudflare adds that tag to the response at the edge; there is no analytics code in this site's own files. Cloudflare describes the service as cookieless: it does not set cookies, does not keep an identifier for you in the browser, and does not follow you to other websites. What we see is aggregated — page path, referring site, country, browser and device type, and Core Web Vitals — not a record of individual visitors.</p>
+<p>Cloudflare may also keep standard server logs, including IP address, browser type and requested URL, for security and abuse prevention. Those logs are controlled by Cloudflare, not by us.</p>
+<p>Because the measurement is cookieless, the site shows no cookie banner. If a browser setting or extension blocks the beacon, every part of the site still works.</p>
 
 <h2>Advertising</h2>
 <p>The page layout reserves space for advertising, but no ad code is installed right now. If third-party advertising such as Google AdSense is enabled in future, Google and its partners may use cookies or similar technologies to serve and measure ads, and this policy will be updated before that happens. You will then be able to opt out of personalised advertising through Google's Ads Settings and, where required, through a consent prompt.</p>
@@ -1380,7 +1388,7 @@ def page_privacy() -> dict:
 <p>Pages link to Roblox, Discord, the developer's group and other code trackers. Those sites have their own privacy policies, and we are not responsible for their content or data practices.</p>
 
 <h2>Changes</h2>
-<p>If this policy changes, the effective date at the top of this page will change with it. Material changes — such as enabling advertising or analytics — will be reflected here before they take effect.</p>
+<p>If this policy changes, the effective date at the top of this page will change with it. Material changes — such as enabling advertising or switching analytics providers — will be reflected here before they take effect.</p>
 
 <h2>Contact</h2>
 <p>Questions about this policy: <a href="mailto:{EMAIL}">{EMAIL}</a>.</p>

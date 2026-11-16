@@ -93,7 +93,9 @@ is read from `DDC_WEBHOOK_URL` only; it is never stored in the repo.
 
 - No backend, no database, no server-side rendering.
 - No forms: the contact page uses a `mailto:` link.
-- No analytics, tag manager, pixels or cookie banner.
+- No GA4, tag manager, tracking pixels or cookie banner. Cloudflare Web Analytics is enabled in the
+  Cloudflare dashboard: cookieless, injected at the edge, with no analytics code in this repo or in `dist/`.
+  Confirmed live on 2026-11-16, with pageviews recorded since 2026-11-15.
 - No CMP for EEA/UK/Switzerland consent, which AdSense would require before ads go live.
 - No CI, tests or linting pipeline; verification is the build's own checks plus manual browser passes.
 

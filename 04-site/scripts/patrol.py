@@ -21,16 +21,25 @@ Examples
 Webhook
     Read from $DDC_WEBHOOK_URL (never hard-coded, never committed). If unset the
     report is still written and the notification is skipped with a warning.
+
+    $DDC_WEBHOOK_SECRET (optional) turns on Feishu custom-bot signing: the body
+    gets `timestamp` + `sign`, where sign = base64(HMAC-SHA256(key =
+    timestamp + "\\n" + secret, msg = "")). Only applied to Feishu/Lark hosts.
+    $DDC_DAILY_SUMMARY=1 sends one digest after every normal run, even when
+    nothing changed (the default `0`/unset only notifies on findings/failures).
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
+import hmac
 import json
 import os
 import re
 import shutil
+import socket
 import sys
 import time
 import urllib.error
@@ -77,6 +86,13 @@ def fetch(url: str, timeout: int = 25) -> str:
     raise RuntimeError(f"fetch failed after {ATTEMPTS} attempts: {type(last).__name__}: {last}")
 
 
+def feishu_sign(timestamp: str, secret: str) -> str:
+    """Feishu custom-bot signature: HMAC-SHA256(key=timestamp+"\\n"+secret, msg="")."""
+    string_to_sign = f"{timestamp}\n{secret}"
+    digest = hmac.new(string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
+    return base64.b64encode(digest).decode("ascii")
+
+
 def notify(text: str, dry_run: bool, no_notify: bool) -> bool:
     url = os.environ.get("DDC_WEBHOOK_URL", "").strip()
     if no_notify:
@@ -88,11 +104,16 @@ def notify(text: str, dry_run: bool, no_notify: bool) -> bool:
     if dry_run:
         log(f"  notify: would POST {len(text)} chars to the configured webhook")
         return False
+    secret = os.environ.get("DDC_WEBHOOK_SECRET", "").strip()
     host = url.split("/")[2] if url.count("/") >= 2 else ""
     if "discord" in host:
         body = {"content": text[:1900]}
     elif "feishu" in host or "larksuite" in host:
         body = {"msg_type": "text", "content": {"text": text[:1900]}}
+        if secret:
+            timestamp = str(int(time.time()))
+            body["timestamp"] = timestamp
+            body["sign"] = feishu_sign(timestamp, secret)
     else:
         body = {"text": text[:1900]}
     try:
@@ -210,6 +231,20 @@ def build_report(now: datetime, cur: dict, prev: dict | None, new_codes: list[st
 
 
 # ------------------------------------------------------------------------- main
+def build_summary(now: datetime, cur: dict, desc_sha: str, new_codes: list[str],
+                  missing: list[str], report_path: Path) -> str:
+    """First lines of the report, compact enough for one chat message."""
+    return "\n".join([
+        f"[DragDriveCodes patrol {now:%Y-%m-%d}] 每日简报",
+        f"主机：{socket.gethostname()}",
+        f"体验：{cur['name']}",
+        f"updated：{cur['updated'] or 'unknown'}",
+        f"description sha256：{desc_sha[:16]}",
+        f"疑似新码 {len(new_codes)} 条 / 疑似失效 {len(missing)} 条",
+        f"报告：{report_path}",
+    ])
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="DragDriveCodes daily code patrol (report only).")
     p.add_argument("--once", action="store_true", help="run once (default action)")
@@ -297,7 +332,8 @@ def main(argv: list[str] | None = None) -> int:
     baseline = [c for c in tokens if c not in known] if prev is None else None
     report = build_report(now, cur, prev, new_codes, missing, diff_text, f"{stamp}.json", baseline)
 
-    log(f"  updated={cur['updated']}  desc_sha={hashlib.sha256(cur['description'].encode()).hexdigest()[:12]}")
+    desc_sha = hashlib.sha256(cur["description"].encode()).hexdigest()
+    log(f"  updated={cur['updated']}  desc_sha={desc_sha[:12]}")
     log(f"  candidates={len(new_codes)} missing={len(missing)} tokens_seen={len(tokens)}")
     if baseline:
         log("  基线候选（未触发告警）: " + ", ".join(baseline))
@@ -318,7 +354,7 @@ def main(argv: list[str] | None = None) -> int:
         (rep_dir / f"{now:%Y-%m-%d}.md").write_text(report, encoding="utf-8")
         state = {"last_success": now.isoformat(timespec="seconds"),
                  "last_updated": cur["updated"],
-                 "desc_sha256": hashlib.sha256(cur["description"].encode()).hexdigest(),
+                 "desc_sha256": desc_sha,
                  "new": new_codes, "missing": missing}
         (base / "state.json").write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -340,6 +376,14 @@ def main(argv: list[str] | None = None) -> int:
             log(f"  ! 上次成功是 {gap.days} 天前，检查定时器是否在跑")
             notify(f"[DragDriveCodes patrol] 静默告警：上次成功在 {gap.days} 天前，今天的运行已恢复",
                    a.dry_run, a.no_notify)
+
+    # Daily digest: one message per normal run, even when nothing changed. This is
+    # the heartbeat that proves the timer actually ran. On a day with findings the
+    # hit alert below is sent too (two messages on purpose: digest + actionable alert).
+    if os.environ.get("DDC_DAILY_SUMMARY", "").strip() == "1" and not a.dry_run:
+        notify(build_summary(now, cur, desc_sha, new_codes, missing,
+                             rep_dir / f"{now:%Y-%m-%d}.md"),
+               a.dry_run, a.no_notify)
 
     hit = bool(new_codes or missing)
     if hit:

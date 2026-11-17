@@ -170,11 +170,13 @@ python scripts\patrol.py                    # 正常跑（写快照 + 报告，�
 
 | 项 | 说明 |
 |---|---|
-| 依赖 | 仅 Python 标准库（`urllib`/`json`/`re`/`hashlib`），无 pip 安装 |
+| 依赖 | 仅 Python 标准库（`urllib`/`json`/`re`/`hashlib`/`hmac`/`base64`/`socket`），无 pip 安装 |
 | 状态目录 | Linux 默认 `/var/lib/ddc-patrol`，Windows 默认 `~/.ddc-patrol`，可用 `DDC_STATE_DIR` 覆盖 |
 | 目录权限 | `/var/lib/ddc-patrol` → `0750 ddc:ddc`；快照 `snapshots/*.json` 与 `state.json` → `0640 ddc:ddc`；配置 `/etc/ddc-patrol/patrol.env` → `0640 root:ddc` |
 | 文件布局 | `snapshots/YYYY-MM-DDTHHMMZ.json`、`snapshots/latest.json`、`reports/YYYY-MM-DD.md`、`state.json`；`--keep 90` 清理 90 天前快照 |
-| 告警 | webhook 只从环境变量 `DDC_WEBHOOK_URL` 读（**不写死、不入库**）；未设置时打印 `notify: skipped` 并照常落盘。按 host 自动区分 Discord / 飞书 / 通用 JSON |
+| 告警 | webhook 只从环境变量 `DDC_WEBHOOK_URL` 读（**不写死、不入库**）；未设置时打印 `notify: skipped` 并照常落盘，**没有邮件/短信兜底**。按 host 自动区分 Discord / 飞书 / 通用 JSON |
+| 每日简报 | `DDC_DAILY_SUMMARY=1`：每次正常运行都推一条（无变化也推），含日期、主机名、体验名、`updated`、desc sha、候选/失效条数、报告路径；有候选码时另发一条告警（当天共两条）。`0` 或不写 = 只在有候选、拉取失败、静默恢复时推 |
+| 飞书签名 | `DDC_WEBHOOK_SECRET` 非空时，对 `feishu` / `larksuite` 域名追加 `timestamp` + `sign`：`string_to_sign = timestamp + "\n" + secret`，`sign = base64(HMAC-SHA256(key=string_to_sign, msg=""))`；其他 webhook 不带头部字段 |
 | 失败行为 | HTTP 失败重试 3 次（2/4/8s 退避）；全程失败退出码 30，有候选退出码 10；静默 >36h 只在成功运行时追加提醒并推 webhook，退出码不变（没有 40；systemd 里用 `--exit-zero`） |
 | 首次运行 | 只建基线不告警，报告里的候选码标为「基线候选（仅供参考）」 |
 

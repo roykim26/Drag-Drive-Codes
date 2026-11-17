@@ -36,7 +36,7 @@ timedatectl
 | 项 | 结论 |
 |---|---|
 | Python | **3.8+**。本机装 `python38` 模块后用 `/usr/bin/python3.8`（3.8.17）；系统自带 `python3` 是 3.6.8，**本方案不使用**（脚本里有 `from __future__ import annotations`，3.6 直接起不来） |
-| 第三方依赖 | **零**。只用 `urllib.request` / `json` / `re` / `difflib` / `pathlib` / `argparse` / `hashlib` / `datetime` |
+| 第三方依赖 | **零**。只用 `urllib.request` / `json` / `re` / `difflib` / `pathlib` / `argparse` / `hashlib` / `hmac` / `base64` / `socket` / `datetime` |
 | 虚拟环境 | 不需要（无依赖就没有隔离问题，也少一个每月要重建的 venv） |
 | 网络出口 | 服务器需要能访问 `games.roblox.com`（东京节点通常可达；若不通，见 §6 的失败处理） |
 | 磁盘 | 快照 + 报告都是几十 KB/天，预留 100 MB 足够 |
@@ -154,6 +154,12 @@ sudo chmod 0755 /opt/ddc-patrol/run-patrol.sh
 ```
 
 > 注意 `--codes-file`：脚本默认按 `脚本目录/../data/codes.json` 找码表，服务器上没有这个路径。少了这个参数，`load_known()` 会打印 `codes file not found`，把官方描述里的所有候选都当成新码。
+>
+> 手工单跑 wrapper 时**不会**自动加载 `patrol.env`——`EnvironmentFile=` 是 systemd 的行为，wrapper 本身没有 `source`。要复现线上行为（含 `DDC_DAILY_SUMMARY` 与 webhook）：
+>
+> ```bash
+> sudo -u ddc sh -c 'set -a; . /etc/ddc-patrol/patrol.env; set +a; /opt/ddc-patrol/run-patrol.sh'
+> ```
 
 **【服务器】** 新建 `/etc/systemd/system/ddc-patrol.service`
 
@@ -252,7 +258,8 @@ cron 的坑：漏跑不补、日志要自己转、环境变量为空（所以 wr
 5. 疑似失效：description 变了以后，active 里的码这次没出现 → 标记，不自动改状态
 6. 写 snapshots/yyyymmddThhmmZ.json + latest.json + reports/yyyy-mm-dd.md + state.json，
    并按 --keep（默认 90 天）清理旧快照
-7. webhook 推一条摘要；成功运行时额外检查 state.json 的 last_success，超过 36h 追加静默提醒
+7. webhook 推一条摘要；`DDC_DAILY_SUMMARY=1` 时即使无变化也推一条每日简报；
+   成功运行时额外检查 state.json 的 last_success，超过 36h 追加静默提醒
 ```
 
 > 为什么「description 没变就什么都不报」：官方经常只改缩略图或标题，`updated` 会动但描述不动。这种日子把同一批候选码再推一遍只会让人忽略告警。代价是**首次运行和描述未变的日子看不到 active 码是否还在描述里**，这是刻意取舍，不是漏算。
@@ -307,7 +314,7 @@ snapshots/2026-11-16T0010Z.json
 
 > 没有 40。配置/权限错误（目录不可写、env 文件缺失）是未捕获异常，Python 以 1 退出并打印 traceback。
 >
-> systemd 里 `10` 会被记成 `failed`（oneshot 非 0 即失败）。wrapper 统一加了 `--exit-zero`，让它只靠报告和 webhook 区分，unit 不需要 `SuccessExitStatus=`。
+> systemd 里 `10` 会被记成 `failed`（oneshot 非 0 即失败）。wrapper 统一加了 `--exit-zero`，把「有候选」的 10 改成 0，避免每天因为一条待确认的码把 unit 标红。**它不影响失败路径**：拉取/解析失败仍然返回 30，unit 仍然 `failed` 并触发 `OnFailure=`（已用本地用例验证）。
 
 ### 4.5 历史骨架（已删除）
 
@@ -316,6 +323,10 @@ snapshots/2026-11-16T0010Z.json
 ---
 
 ## 5. 结果怎么送到你手上
+
+> **为什么 2026-11-17 早上一条都没收到**：那一轮巡检**跑成功了**（journal 里 `Succeeded`，`state.json` 的 `last_success` 已更新），但 `/etc/ddc-patrol/patrol.env` 里 `DDC_WEBHOOK_URL` 是空值。`notify()` 的第一道判断就是「URL 为空 → 打印 `notify: skipped (DDC_WEBHOOK_URL not set)` 后返回」，没有邮件/短信兜底，报告只落在服务器 `/var/lib/ddc-patrol/reports/`。空值不是错误，巡检照常完成，所以 journal 里只有这一行、没有报错。
+>
+> 现在加了每日简报开关：`DDC_DAILY_SUMMARY=1` 时**每个正常运行的早上都会推一条**（哪怕没有新码）。它走的还是同一个 `notify()`，webhook 为空时同样发不出去。**填上 webhook 是唯一必须做的一步。**
 
 | 方式 | 优点 | 缺点 | 建议 |
 |---|---|---|---|
@@ -335,30 +346,46 @@ curl -s -X POST "$DDC_WEBHOOK_URL" \
 
 ### 5.2 飞书自定义机器人
 
+机器人后台**关闭**「签名校验」时，请求体就是最普通的一条文本：
+
 ```bash
 curl -s -X POST "$DDC_WEBHOOK_URL" \
   -H "Content-Type: application/json" \
   -d '{"msg_type":"text","content":{"text":"Patrol 2026-11-15: 1 条疑似新码 DRAGDRIVESIMULATORNOVEMBER26"}}'
 ```
 
-> 飞书机器人还可以加「签名校验」，那样 env 里要多一个 secret，并在脚本里算 HMAC。要加就一起加，别只存一半。
+机器人后台**开启**「签名校验」时，在 env 里加 `DDC_WEBHOOK_SECRET`（见 §5.3），脚本会按飞书规则自行签名：
 
-### 5.3 env 文件
+1. `string_to_sign = timestamp + "\n" + secret`，`timestamp` 是秒级整数；
+2. `sign = base64(HMAC-SHA256(key=string_to_sign, msg=""))` —— 注意**用 `string_to_sign` 本身当 HMAC 的 key，消息体为空**，这是飞书的定义，不是常见的「key=secret、msg=timestamp」；
+3. 请求体变成 `{"timestamp": "...", "sign": "...", "msg_type": "text", "content": {"text": "..."}}`。
+
+实现只用标准库 `hmac` / `hashlib` / `base64`，没有新依赖。签名只对 `feishu` / `larksuite` 域名的 webhook 生效；Discord 与通用 webhook 即使设了 secret 也不会带这两个字段。机器人后台关闭签名校验时，把 `DDC_WEBHOOK_SECRET` 留空即可，行为与旧版完全一致。
+
+### 5.3 env 文件（三个变量）
 
 **【服务器】**
 
 ```bash
 sudo tee /etc/ddc-patrol/patrol.env >/dev/null <<'EOF'
 DDC_WEBHOOK_URL=
+DDC_WEBHOOK_SECRET=
+DDC_DAILY_SUMMARY=1
 EOF
 sudo chown root:ddc /etc/ddc-patrol/patrol.env
 sudo chmod 0640 /etc/ddc-patrol/patrol.env
 ```
 
-> 当前状态（2026-11-16）：**留空**。用户还没提供飞书机器人地址，所以只写报告、不发通知。留空不是错误，脚本会打印 `notify: skipped (DDC_WEBHOOK_URL not set)`，巡检本身照常完成。
->
-> 拿到 webhook 后只需改这一个文件（`DDC_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/…`），不用重启 timer，下一次触发就生效。
->
+| 变量 | 作用 | 当前状态（2026-11-17） |
+|---|---|---|
+| `DDC_WEBHOOK_URL` | 机器人 webhook 地址；**空值 = 不发送任何消息**，只在服务器上写报告 | 空，等用户提供飞书地址 |
+| `DDC_WEBHOOK_SECRET` | 飞书机器人「签名校验」的 secret；空值 = 不签名 | 空 |
+| `DDC_DAILY_SUMMARY` | `1` = 每次正常运行都推一条简报（无变化也推）；`0` 或不写 = 只在有候选码、拉取失败、静默恢复时推 | **已设为 1** |
+
+每日简报的内容就是报告头几行：日期、主机名、体验名、`updated`、description sha256 前 16 位、疑似新码/失效条数、报告文件路径。有候选码的那天会收到**两条**：先简报、后告警，这是刻意设计（简报证明任务跑了，告警才需要人动手）。
+
+`DDC_WEBHOOK_URL` 与 `DDC_WEBHOOK_SECRET` 都是密钥，只能放这个 `0640 root:ddc` 的文件，**不要写进 unit**（unit 通常 644 全局可读，也不该进仓库）。改完这个文件不需要 `daemon-reload`、不需要重启 timer：service 每次启动时都会重新读 `EnvironmentFile`。
+
 > 变量名是 **`DDC_WEBHOOK_URL`**（D-D-C，DragDriveCodes 的首字母），不是 `DDD_`。脚本只读这一个名字，写成 `DDD_WEBHOOK_URL` 不会报错，只会打印 `notify: skipped`，等于静默漏掉所有告警。
 >
 > 旧版这里还有一个 `DDC_NOTIFY=1`，脚本从未读取，已删除。
@@ -375,7 +402,7 @@ sudo chmod 0640 /etc/ddc-patrol/patrol.env
 
    - 距今 > 36 小时 → 在成功消息里追加一行「⚠️ 上次成功是 X 天前」；
    - 注意这条提醒只有**成功运行时**才会发。如果任务本身每天都失败，靠的是第 2 层的 `OnFailure`，而不是这条。
-   - `--heartbeat` **未实现**（脚本没有这个参数）。若确实需要「每周日无论有没有变化都发一句」，用现成的 `--alert` 加一个独立 timer 即可，不需要改脚本：`ExecStart=/opt/ddc-patrol/run-patrol.sh --alert "weekly heartbeat"`。
+   - 每日心跳：`DDC_DAILY_SUMMARY=1` 已实现（见 §5.3），每次正常运行都发一条简报，不需要额外 timer。脚本**没有** `--heartbeat` 参数；如果只想在固定某天发一句，仍可用 `--alert` 加一个独立 timer：`ExecStart=/opt/ddc-patrol/run-patrol.sh --alert "weekly heartbeat"`。
 
 查看状态：
 
@@ -398,7 +425,7 @@ journalctl -u ddc-patrol.service --since "7 days ago" | grep -c "fetch failed"
 |---|---|---|
 | 1 | `sudo -u ddc /usr/bin/python3.8 -c "import ast; ast.parse(open('/opt/ddc-patrol/patrol.py').read())"` | 无输出 = 语法通过。**不要用 `python3 -m py_compile`**：它会在 `/opt/ddc-patrol` 写 `__pycache__`，而该目录对 `ddc` 只读，会报 `PermissionError` |
 | 2 | `sudo -u ddc /opt/ddc-patrol/run-patrol.sh --dry-run` | 打印本次快照摘要，**不写** `state.json`；`snapshots/` 里不新增文件 |
-| 3 | `sudo -u ddc /opt/ddc-patrol/run-patrol.sh` | 退出码 0（wrapper 带 `--exit-zero`）；`reports/<今天>.md` 生成；`snapshots/` 有新 json |
+| 3 | `sudo -u ddc /opt/ddc-patrol/run-patrol.sh` | 退出码 0（wrapper 带 `--exit-zero`）；`reports/<今天>.md` 生成；`snapshots/` 有新 json；webhook 为空时会打印 `notify: skipped (DDC_WEBHOOK_URL not set)`（`DDC_DAILY_SUMMARY=1` 也走这条路，同样跳过） |
 | 4 | `ls -l /var/lib/ddc-patrol/reports/` | 文件属主是 `ddc`，权限 640 |
 | 5 | `sudo systemctl daemon-reload && sudo systemctl start ddc-patrol.service` | `systemctl status` 显示 `inactive (dead)` 且 `Result=success`（oneshot 正常结束就是 dead） |
 | 6 | `journalctl -u ddc-patrol.service -n 20` | 有你脚本打印的摘要，没有 traceback；且不应出现 `codes file not found` |

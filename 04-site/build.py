@@ -1959,15 +1959,32 @@ def build() -> None:
     if (DIST / "favicon.ico").exists():
         print("  wrote favicon.ico (16/32/48 raster fallback)")
 
-    # Cloudflare Pages: _headers applies static response headers. CSP is deliberately
-    # absent -- the site has inline <style>/<script> and a data: URI favicon, and a
-    # wrong CSP silently breaks the copy buttons. Add it only after testing it.
+    # Cloudflare Pages: _headers applies static response headers.
+    # CSP is sent as Report-Only on purpose: the pages use inline <style>/<script>
+    # and a data: favicon, so enforcing a policy before collecting violations would
+    # silently break the copy buttons. Report-Only restricts nothing; promote it to
+    # Content-Security-Policy only after the browser console stays clean for a week.
+    # HSTS starts at one day: if anything on a subdomain is still plain HTTP, the
+    # rollback window is short. Raise max-age in a later commit, never use preload.
     (DIST / "_headers").write_text(
         "/*\n"
         "  X-Content-Type-Options: nosniff\n"
         "  Referrer-Policy: strict-origin-when-cross-origin\n"
         "  X-Frame-Options: DENY\n"
-        "  Permissions-Policy: geolocation=(), microphone=(), camera=(), interest-cohort=()\n"
+        "  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=()\n"
+        "  Strict-Transport-Security: max-age=86400\n"
+        "  Content-Security-Policy-Report-Only: default-src 'self'; "
+        "base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; "
+        "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com "
+        "https://pagead2.googlesyndication.com https://static.cloudflareinsights.com; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data: https://twelve.tools "
+        "https://*.googlesyndication.com https://*.doubleclick.net https://www.google-analytics.com; "
+        "font-src 'self'; connect-src 'self' https://*.google-analytics.com "
+        "https://*.analytics.google.com https://cloudflareinsights.com "
+        "https://www.googletagmanager.com https://pagead2.googlesyndication.com "
+        "https://googleads.g.doubleclick.net; "
+        "frame-src https://googleads.g.doubleclick.net https://tpc.googlesyndication.com; "
+        "upgrade-insecure-requests\n"
         "\n"
         "/og.png\n"
         "  Cache-Control: public, max-age=86400\n"
